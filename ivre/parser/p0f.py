@@ -40,9 +40,9 @@ class P0fFile(Parser):
         m = LINE_RE.match(line.decode())
         if not m:
             return {}
-        res: Dict[str, Any] = {}
-        # time of event
-        res["ts"] = datetime.datetime.strptime(m.group("time"), "%Y/%m/%d %H:%M:%S")
+        res: Dict[str, Any] = {
+            "ts": datetime.datetime.strptime(m.group("time"), "%Y/%m/%d %H:%M:%S")
+        }
         # data of event
         for entry in m.group("data").split("|"):
             k, v = entry.split("=", 1)

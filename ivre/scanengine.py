@@ -48,20 +48,11 @@ class Agent:
         self.remotepathbase = remotepathbase
         self.localpathbase = localpathbase
         self.maxwaiting = maxwaiting
-        if host is None:
-            self.rsyncbase = remotepathbase
-        else:
-            self.rsyncbase = "%s:%s" % (host, remotepathbase)
+        self.rsyncbase = remotepathbase if host is None else f"{host}:{remotepathbase}"
         if self.rsyncbase[-1] not in ":/":
             self.rsyncbase += "/"
-        if name is None:
-            self.name = localpathbase.lstrip("./")
-        else:
-            self.name = name
-        if usetor:
-            self.rsync = ["torify", "rsync"]
-        else:
-            self.rsync = ["rsync"]
+        self.name = localpathbase.lstrip("./") if name is None else name
+        self.rsync = ["torify", "rsync"] if usetor else ["rsync"]
         self.campaigns = []
 
     @classmethod
@@ -88,7 +79,7 @@ class Agent:
             string[1],
             os.path.join(
                 localbase,
-                "%s_%s" % (string[0].replace("@", "_"), string[1].replace("/", "_")),
+                f'{string[0].replace("@", "_")}_{string[1].replace("/", "_")}',
             ),
             usetor=usetor,
             maxwaiting=maxwaiting,
@@ -96,7 +87,7 @@ class Agent:
 
     def get_local_path(self, dirname):
         """Get local storage path for directory `dirname`."""
-        return os.path.join(self.localpathbase, dirname) + "/"
+        return f"{os.path.join(self.localpathbase, dirname)}/"
 
     def get_remote_path(self, dirname):
         """Get remote storage path for directory `dirname` as an rsync
@@ -135,14 +126,7 @@ class Agent:
         resolved from the agent).
 
         """
-        with open(
-            os.path.join(
-                self.get_local_path("input"),
-                "%s.%s" % (category, addr.replace("/", "_")),
-            ),
-            "w",
-            encoding="utf8",
-        ) as fdesc:
+        with open(os.path.join(self.get_local_path("input"), f'{category}.{addr.replace("/", "_")}'), "w", encoding="utf8") as fdesc:
             fdesc.write("%s\n" % addr)
             return True
         return False
@@ -247,11 +231,7 @@ class Campaign:
         the target status.
 
         """
-        for remfname in glob.glob(
-            os.path.join(
-                agent.get_local_path("remoteoutput"), self.visiblecategory + ".*.xml*"
-            )
-        ):
+        for remfname in glob.glob(os.path.join(agent.get_local_path("remoteoutput"), f"{self.visiblecategory}.*.xml*")):
             locfname = os.path.basename(remfname).split(".", 4)
             locfname[0] = self.category
             status = "unknown"
@@ -275,11 +255,7 @@ class Campaign:
             )
             utils.makedirs(os.path.dirname(locfname))
             os.rename(remfname, locfname)
-        for remfname in glob.glob(
-            os.path.join(
-                agent.get_local_path("remotedata"), self.visiblecategory + ".*.tar*"
-            )
-        ):
+        for remfname in glob.glob(os.path.join(agent.get_local_path("remotedata"), f"{self.visiblecategory}.*.tar*")):
             locfname = os.path.basename(remfname).split(".", 4)
             locfname[0] = self.category
             locfname = os.path.join(
@@ -299,14 +275,7 @@ class Campaign:
         """
         for _ in range(max(agent.may_receive(), maxnbr or 0)):
             addr = utils.int2ip(next(self.targiter))
-            with open(
-                os.path.join(
-                    agent.get_local_path("input"),
-                    "%s.%s" % (self.visiblecategory, addr),
-                ),
-                "w",
-                encoding="utf8",
-            ) as fdesc:
+            with open(os.path.join(agent.get_local_path("input"), f"{self.visiblecategory}.{addr}"), "w", encoding="utf8") as fdesc:
                 fdesc.write("%s\n" % addr)
 
     def feedloop(self):

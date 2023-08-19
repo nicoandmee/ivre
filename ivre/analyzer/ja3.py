@@ -77,10 +77,14 @@ def banner2ja3c(banner: bytes) -> Optional[str]:
         except AttributeError:
             utils.LOGGER.warning("Cannot parse TLS message [%r]", msg)
             continue
-        output.append(str(msg.version))
-        output.append("-".join(str(c) for c in msg.ciphers or [] if c not in GREASE))
-        output.append(
-            "-".join(str(e.type) for e in msg.ext or [] if e.type not in GREASE)
+        output.extend(
+            (
+                str(msg.version),
+                "-".join(str(c) for c in msg.ciphers or [] if c not in GREASE),
+                "-".join(
+                    str(e.type) for e in msg.ext or [] if e.type not in GREASE
+                ),
+            )
         )
         ecsg: List[str] = []
         ecpf: List[str] = []
@@ -89,12 +93,9 @@ def banner2ja3c(banner: bytes) -> Optional[str]:
                 ecsg.extend(str(g) for g in ext.groups if g not in GREASE)
             elif ext.type == 11:  # ec_point_formats
                 ecpf.extend(str(p) for p in ext.ecpl if p not in GREASE)
-        output.append("-".join(ecsg))
-        output.append("-".join(ecpf))
+        output.extend(("-".join(ecsg), "-".join(ecpf)))
         break
-    if not output:
-        return None
-    return ",".join(output)
+    return None if not output else ",".join(output)
 
 
 def banner2script(banner: bytes) -> Optional[Dict[str, Any]]:

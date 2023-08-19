@@ -36,7 +36,7 @@ AZURE_URL = re.compile(b'<a href="(https://download.microsoft.com/download/[^"]*
 
 def get_azure_url() -> str:
     opener = build_opener()
-    opener.addheaders = [("User-Agent", "IVRE/%s +https://ivre.rocks/" % VERSION)]
+    opener.addheaders = [("User-Agent", f"IVRE/{VERSION} +https://ivre.rocks/")]
     with opener.open(
         "https://www.microsoft.com/en-us/download/confirmation.aspx?id=57063"
     ) as udesc:
@@ -70,15 +70,16 @@ def build_table() -> List[Tuple[str, str, List[str]]]:
     ) as fdesc:
         all_entries = json.load(fdesc)["values"]
     for entry in all_entries:
-        data = []
         properties = entry.get("properties", {})
-        for fld, name in [
-            ("platform", "Platform"),
-            ("region", "Region"),
-            ("systemService", "Service"),
-        ]:
-            if properties.get(fld):
-                data.append(f"{name}: {properties[fld]}")
+        data = [
+            f"{name}: {properties[fld]}"
+            for fld, name in [
+                ("platform", "Platform"),
+                ("region", "Region"),
+                ("systemService", "Service"),
+            ]
+            if properties.get(fld)
+        ]
         data = sorted(data)
         for net in properties.get("addressPrefixes", []):
             start, stop = net2range(net)
@@ -94,9 +95,11 @@ def build_table() -> List[Tuple[str, str, List[str]]]:
             continue
         start, stop = net2range(entry["ip_prefix"])
         data = ["Platform: AWS"]
-        for fld, name in [("region", "Region"), ("service", "Service")]:
-            if entry.get(fld):
-                data.append(f"{name}: {entry[fld]}")
+        data.extend(
+            f"{name}: {entry[fld]}"
+            for fld, name in [("region", "Region"), ("service", "Service")]
+            if entry.get(fld)
+        )
         data = sorted(data)
         all_ranges.append((start, stop, data))
 

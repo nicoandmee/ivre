@@ -216,9 +216,7 @@ class Point(UserDefinedType):
     @staticmethod
     def bind_processor(dialect):
         def process(value):
-            if value is None:
-                return None
-            return "%f,%f" % value
+            return None if value is None else "%f,%f" % value
 
         return process
 

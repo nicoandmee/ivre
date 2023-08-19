@@ -49,11 +49,8 @@ addr_fields = {
 
 def get_addr_argument(field: str, value: str) -> Tuple[str, str]:
     addr_field = addr_fields[field]
-    # Detect CIDR
-    op = "="
-    if "/" in value:
-        op = "=~"
-    return (addr_field["type"], "%s %s %s" % (addr_field["field"], op, value))
+    op = "=~" if "/" in value else "="
+    return addr_field["type"], f'{addr_field["field"]} {op} {value}'
 
 
 def print_fields() -> None:
@@ -277,14 +274,15 @@ def main() -> None:
         db.flow.ensure_indexes()
         sys.exit(0)
 
-    if args.fields is not None and not args.fields:
-        # Print fields list
-        print_fields()
-        sys.exit(0)
-    elif args.fields is not None:
-        # Validate given fields
-        for field in args.fields:
-            ivre.flow.validate_field(field)
+    if args.fields is not None:
+        if not args.fields:
+            # Print fields list
+            print_fields()
+            sys.exit(0)
+        else:
+            # Validate given fields
+            for field in args.fields:
+                ivre.flow.validate_field(field)
 
     if args.precision == 0:
         # Get precisions list
@@ -301,10 +299,10 @@ def main() -> None:
             filters[flt_t].append(flt_v)
 
     if args.proto is not None:
-        filters["edges"].append("proto = %s" % args.proto)
+        filters["edges"].append(f"proto = {args.proto}")
     for key in ["tcp", "udp"]:
         if args_dict[key]:
-            filters["edges"].append("proto = %s" % key)
+            filters["edges"].append(f"proto = {key}")
 
     for key in ["port", "dport"]:
         if args_dict[key] is not None:
@@ -314,14 +312,14 @@ def main() -> None:
         filters["edges"].append("ANY sports = %d" % args.sport)
 
     time_args = ["before", "after"]
-    time_values = {}
-    for arg in time_args:
-        time_values[arg] = (
+    time_values = {
+        arg: (
             datetime.datetime.strptime(args_dict[arg], "%Y-%m-%d %H:%M")
             if args_dict[arg] is not None
             else None
         )
-
+        for arg in time_args
+    }
     query = db.flow.from_filters(
         filters,
         limit=args.limit,
@@ -379,7 +377,7 @@ def main() -> None:
                     rec["count"],
                     sep,
                     coma.join(
-                        str("(" + coma2.join(str(val) for val in collected) + ")")
+                        str(f"({coma2.join(str(val) for val in collected)})")
                         for collected in rec["collected"]
                     )
                     if rec["collected"]
@@ -400,7 +398,7 @@ def main() -> None:
                     [
                         rec["time_in_day"].strftime("%T.%f"),
                         " ; ".join(
-                            ["(" + x[0] + ", " + str(x[1]) + ")" for x in rec["flows"]]
+                            [f"({x[0]}, {str(x[1])})" for x in rec["flows"]]
                         ),
                     ]
                 )
@@ -452,14 +450,9 @@ def main() -> None:
                 for elt in ["src", "flow", "dst"]:
                     elts[elt] = res[elt]["label"]
                     if args.fields:
-                        elts[elt] = "%s%s%s" % (
-                            elts[elt],
-                            coma,
-                            coma.join(
-                                str(res[elt]["data"].get(field, ""))
-                                for field in args.fields
-                            ),
-                        )
+                        elts[
+                            elt
+                        ] = f'{elts[elt]}{coma}{coma.join(str(res[elt]["data"].get(field, "")) for field in args.fields)}'
                 src, flow, dst = elts["src"], elts["flow"], elts["dst"]
                 node_width = max(node_width, len(src), len(dst))
                 flow_width = max(flow_width, len(flow))

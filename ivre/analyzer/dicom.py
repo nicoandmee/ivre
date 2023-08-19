@@ -139,7 +139,7 @@ def parse_message(data: bytes) -> NmapPort:
         script_output = [
             "",
             "dicom: DICOM Service Provider discovered!",
-            "config: %s" % msg,
+            f"config: {msg}",
         ]
         script_data: Dict[str, Union[int, str]] = {
             "dicom": "DICOM Service Provider discovered!",

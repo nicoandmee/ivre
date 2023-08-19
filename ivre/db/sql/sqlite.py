@@ -38,7 +38,7 @@ class SqliteDB(SQLDB):
     def __init__(self, url):
         super().__init__(url)
         # url.geturl() removes two necessary '/' from url
-        self.dburl = "%s://%s" % (url.scheme, url.path)
+        self.dburl = f"{url.scheme}://{url.path}"
 
     def explain(self, req, **_):
         raise Exception("Explain is not yet implemented for sqlite.")
@@ -70,7 +70,7 @@ class SqliteDBPassive(SqliteDB, SQLDBPassive):
             self.tables.passive.targetval,
             self.tables.passive.info,
             unique=True,
-            sqlite_where=self.tables.passive.addr == None,  # noqa: E711
+            sqlite_where=self.tables.passive.addr is None,
         )
 
     def _insert_or_update(self, timestamp, values, lastseen=None, replacecount=False):

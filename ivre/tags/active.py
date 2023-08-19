@@ -122,10 +122,7 @@ def gen_auto_tags(
         yield cast(Tag, dict(TAG_CDN, info=["Too many hostnames"]))
     for port in host.get("ports", []):
         if any("honeypot" in port.get(field, "").lower() for field in _SERVICE_FIELDS):
-            cur_info = []
-            for fld in _SERVICE_FIELDS:
-                if fld in port:
-                    cur_info.append(port[fld])
+            cur_info = [port[fld] for fld in _SERVICE_FIELDS if fld in port]
             yield cast(
                 Tag,
                 dict(
@@ -232,13 +229,14 @@ def gen_auto_tags(
             elif script["id"] == "scanner":
                 if port["port"] != -1:
                     continue
-                scanners = sorted(
-                    set(
+                if scanners := sorted(
+                    {
                         scanner["name"]
-                        for scanner in script.get("scanner", {}).get("scanners", [])
-                    )
-                )
-                if scanners:
+                        for scanner in script.get("scanner", {}).get(
+                            "scanners", []
+                        )
+                    }
+                ):
                     yield cast(Tag, dict(TAG_SCANNER, info=scanners))
                 else:
                     yield TAG_SCANNER

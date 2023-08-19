@@ -227,10 +227,7 @@ class PassiveCSVFile(CSVFile):
                 line.update(line.pop("infos"))
             except KeyError:
                 pass
-        if "addr" in line:
-            line["addr"] = self.ip2internal(line["addr"])
-        else:
-            line["addr"] = None
+        line["addr"] = self.ip2internal(line["addr"]) if "addr" in line else None
         line.setdefault("count", 1)
         line.setdefault("port", -1)
         for key in ["sensor", "value", "source", "targetval"]:
@@ -317,18 +314,14 @@ class SQLDB(DB):
         # required for use with ivre.db.sql.tables.DefaultINET() (see
         # .bind_processor()). Backends using variants must implement
         # their own methods.
-        if not addr:
-            return b""
-        return utils.ip2bin(addr)
+        return b"" if not addr else utils.ip2bin(addr)
 
     @staticmethod
     def internal2ip(addr):
         # required for use with ivre.db.sql.tables.DefaultINET() (see
         # .result_processor()). Backends using variants must implement
         # their own methods.
-        if not addr:
-            return None
-        return utils.bin2ip(addr)
+        return None if not addr else utils.bin2ip(addr)
 
     @staticmethod
     def to_binary(data):
@@ -342,13 +335,11 @@ class SQLDB(DB):
     def flt2str(flt):
         result = {}
         for queryname, queries in flt.all_queries.items():
-            outqueries = []
             if not isinstance(queries, list):
                 queries = [queries]
-            for query in queries:
-                if query is not None:
-                    outqueries.append(str(query))
-            if outqueries:
+            if outqueries := [
+                str(query) for query in queries if query is not None
+            ]:
                 result[queryname] = outqueries
         return json.dumps(result)
 
@@ -384,10 +375,7 @@ class SQLDB(DB):
     # FIXME: move this method
     @classmethod
     def _date_round(cls, date):
-        if isinstance(date, datetime.datetime):
-            ts = date.timestamp()
-        else:
-            ts = date
+        ts = date.timestamp() if isinstance(date, datetime.datetime) else date
         ts = ts - (ts % config.FLOW_TIME_PRECISION)
         if isinstance(date, datetime.datetime):
             return datetime.datetime.fromtimestamp(ts)
@@ -488,26 +476,18 @@ class SQLDB(DB):
             flt = field.op("~*" if (value.flags & re.IGNORECASE) else "~")(
                 value.pattern
             )
-            if neg:
-                return not_(flt)
-            return flt
-        if neg:
-            return field != value
-        return field == value
+            return not_(flt) if neg else flt
+        return field != value if neg else field == value
 
     @staticmethod
     def _searchstring_list(field, value, neg=False, map_=None):
         if not isinstance(value, str) and hasattr(value, "__iter__"):
             if map_ is not None:
                 value = [map_(elt) for elt in value]
-            if neg:
-                return field.notin_(value)
-            return field.in_(value)
+            return field.notin_(value) if neg else field.in_(value)
         if map_ is not None:
             value = map_(value)
-        if neg:
-            return field != value
-        return field == value
+        return field != value if neg else field == value
 
     @classmethod
     def _searchcert(
@@ -702,8 +682,7 @@ class ActiveFilter(Filter):
     def __and__(self, other):
         if self.tables != other.tables:
             raise ValueError(
-                "Cannot 'AND' two filters on separate tables (%s / %s)"
-                % (self.tables, other.tables)
+                f"Cannot 'AND' two filters on separate tables ({self.tables} / {other.tables})"
             )
         return self.__class__(
             main=self.fltand(self.main, other.main),
@@ -802,10 +781,7 @@ class ActiveFilter(Filter):
             else:
                 subreq = subreq.where(subflt)
             subreq = subreq.where(self.tables.port.scan == self.tables.scan.id)
-            if incl:
-                req = req.where(exists(subreq))
-            else:
-                req = req.where(not_(exists(subreq)))
+            req = req.where(exists(subreq)) if incl else req.where(not_(exists(subreq)))
         for incl, subflt in self.tag:
             base = select([self.tables.tag.scan]).where(subflt)
             if incl:
@@ -1278,10 +1254,7 @@ class SQLDBActive(SQLDB, DBActive):
                 data = rec.data["http-server-header"]
                 if isinstance(data, dict):
                     updated = True
-                    if "Server" in data:
-                        data = [data["Server"]]
-                    else:
-                        data = []
+                    data = [data["Server"]] if "Server" in data else []
             else:
                 try:
                     data = [
@@ -1901,7 +1874,7 @@ class SQLDBActive(SQLDB, DBActive):
     def searchservice(cls, srv, port=None, protocol=None):
         """Search an open port with a particular service."""
         if srv is False:
-            req = cls.tables.port.service_name == None  # noqa: E711
+            req = cls.tables.port.service_name is None
         elif isinstance(srv, list):
             req = cls.tables.port.service_name.in_(srv)
         else:
@@ -1924,10 +1897,7 @@ class SQLDBActive(SQLDB, DBActive):
         req = True
         if product is not None:
             if product is False:
-                req = and_(
-                    req,
-                    cls.tables.port.service_product == None,  # noqa: E711
-                )
+                req = and_(req, cls.tables.port.service_product is None)
             elif isinstance(product, list):
                 req = and_(
                     req,
@@ -1943,10 +1913,7 @@ class SQLDBActive(SQLDB, DBActive):
                 )
         if version is not None:
             if version is False:
-                req = and_(
-                    req,
-                    cls.tables.port.service_version == None,  # noqa: E711
-                )
+                req = and_(req, cls.tables.port.service_version is None)
             elif isinstance(version, list):
                 req = and_(
                     req,
@@ -1958,10 +1925,7 @@ class SQLDBActive(SQLDB, DBActive):
                 )
         if service is not None:
             if service is False:
-                req = and_(
-                    req,
-                    cls.tables.port.service_name == None,  # noqa: E711
-                )
+                req = and_(req, cls.tables.port.service_name is None)
             elif isinstance(service, list):
                 req = and_(
                     req,
@@ -1997,7 +1961,7 @@ class SQLDBActive(SQLDB, DBActive):
             )
         if values:
             if isinstance(name, list):
-                all_keys = set(ALIASES_TABLE_ELEMS.get(n, n) for n in name)
+                all_keys = {ALIASES_TABLE_ELEMS.get(n, n) for n in name}
                 if len(all_keys) != 1:
                     raise TypeError(
                         ".searchscript() needs similar `name` values when using a `values` arg"
@@ -2013,21 +1977,16 @@ class SQLDBActive(SQLDB, DBActive):
                 needunwind = sorted(set(cls.needunwind_script(basekey)))
             else:
                 needunwind = sorted(
-                    set(
+                    {
                         unwind
                         for subkey in values
-                        for unwind in cls.needunwind_script(
-                            "%s.%s" % (basekey, subkey),
-                        )
-                    )
+                        for unwind in cls.needunwind_script(f"{basekey}.{subkey}")
+                    }
                 )
 
             def _find_subkey(key):
                 lastmatch = None
-                if key is None:
-                    key = []
-                else:
-                    key = key.split(".")
+                key = [] if key is None else key.split(".")
                 for subkey in needunwind:
                     subkey = subkey.split(".")[1:]
                     if len(key) < len(subkey):
@@ -2079,7 +2038,7 @@ class SQLDBActive(SQLDB, DBActive):
                         req = and_(
                             req,
                             cls.tables.script.data.contains(
-                                _to_json("%s.%s" % (basekey, key), value)
+                                _to_json(f"{basekey}.{key}", value)
                             ),
                         )
                 elif subkey[1] is None:
@@ -2107,10 +2066,7 @@ class SQLDBActive(SQLDB, DBActive):
                         .op("->")(subkey[1])
                         .cast(Boolean)
                     )
-                    if neg:
-                        req = and_(req, base != value)
-                    else:
-                        req = and_(req, base == value)
+                    req = and_(req, base != value) if neg else and_(req, base == value)
                 else:
                     req = and_(
                         req,
@@ -2365,10 +2321,7 @@ class SQLDBActive(SQLDB, DBActive):
     def searchhassh(cls, value_or_hash=None, server=None):
         if server is None:
             return cls._searchhassh(value_or_hash=value_or_hash)
-        if server:
-            portflt = cls.tables.port.port != -1
-        else:
-            portflt = cls.tables.port.port == -1
+        portflt = cls.tables.port.port != -1 if server else cls.tables.port.port == -1
         if value_or_hash is None:
             return cls.base_filter(
                 script=[
@@ -2818,8 +2771,7 @@ class SQLDBPassive(SQLDB, DBPassive):
             "info": info,
             "moreinfo": spec,
             "schema_version": spec.pop("schema_version", None),
-        }
-        vals.update(otherfields)
+        } | otherfields
         self._insert_or_update(
             timestamp, vals, lastseen=lastseen, replacecount=replacecount
         )
@@ -2905,7 +2857,7 @@ class SQLDBPassive(SQLDB, DBPassive):
             elif field == "hassh":
                 flt = self.flt_and(flt, self.searchhassh())
             else:
-                raise ValueError("Unknown field %s" % field)
+                raise ValueError(f"Unknown field {field}")
             if subfield == "md5":
                 field = self.tables.passive.value
             else:
@@ -3182,7 +3134,7 @@ class SQLDBPassive(SQLDB, DBPassive):
                 )
             )
         if dnstype is not None:
-            cnd &= cls.tables.passive.source.op("~")("^%s-" % dnstype.upper())
+            cnd &= cls.tables.passive.source.op("~")(f"^{dnstype.upper()}-")
         return PassiveFilter(main=cnd)
 
     @classmethod
@@ -3345,9 +3297,7 @@ class SQLDBPassive(SQLDB, DBPassive):
             )
         key, value = cls._ja3keyvalue(client_value_or_hash)
         if key == "md5":
-            return PassiveFilter(
-                main=(base & (cls.tables.passive.source == "ja3-%s" % value))
-            )
+            return PassiveFilter(main=base & (cls.tables.passive.source == f"ja3-{value}"))
         base &= cls.tables.passive.source.op("~")("^ja3-")
         if key in ["sha1", "sha256"]:
             return PassiveFilter(
@@ -3383,7 +3333,7 @@ class SQLDBPassive(SQLDB, DBPassive):
         if key is not None:
             cnd &= cls._searchstring_re(cls.tables.passive.value, key)
         if keytype is not None:
-            cnd &= cls.tables.passive.moreinfo.op("->>")("algo") == "ssh-" + keytype
+            cnd &= cls.tables.passive.moreinfo.op("->>")("algo") == f"ssh-{keytype}"
         if bits is not None:
             cnd &= cls.tables.passive.moreinfo.op("->>")("bits") == bits
         return PassiveFilter(main=cnd)

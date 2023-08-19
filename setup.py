@@ -45,9 +45,9 @@ class smart_install_data(install_data):
         # install files to /etc when target was /usr(/local)/etc
         if self.install_dir.endswith("/usr") or self.install_dir.endswith("/usr/local"):
             self.data_files = [
-                ("/%s" % path if path.startswith("etc/") else path, files)
+                (f"/{path}" if path.startswith("etc/") else path, files)
                 for path, files in self.data_files
-                if path  # skip README.md or any file with an empty path
+                if path
             ]
         else:
             self.data_files = [
@@ -67,7 +67,7 @@ class smart_install_lib(install_lib):
     def run(self):
         super().run()
         fullfname = os.path.join(self.install_dir, "ivre", "__init__.py")
-        tmpfname = "%s.tmp" % fullfname
+        tmpfname = f"{fullfname}.tmp"
         stat = os.stat(fullfname)
         os.rename(fullfname, tmpfname)
         with open(fullfname, "w", encoding="utf8") as newf:

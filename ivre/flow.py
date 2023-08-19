@@ -209,16 +209,14 @@ def _compute_available_fields() -> None:
     usable or not (useful for meta fields that can be disabled).
     """
     global _ALL_FIELDS
-    _ALL_FIELDS = {}
-    for field in FIELDS:
-        _ALL_FIELDS[field] = True
+    _ALL_FIELDS = {field: True for field in FIELDS}
     meta_enabled = config.FLOW_STORE_METADATA
     for proto, configs in META_DESC.items():
-        _ALL_FIELDS["meta.%s" % proto] = meta_enabled
+        _ALL_FIELDS[f"meta.{proto}"] = meta_enabled
         for name in configs["keys"]:
-            _ALL_FIELDS["meta.%s.%s" % (proto, name)] = meta_enabled
+            _ALL_FIELDS[f"meta.{proto}.{name}"] = meta_enabled
         for name in configs.get("counters", []):
-            _ALL_FIELDS["meta.%s.%s" % (proto, name)] = meta_enabled
+            _ALL_FIELDS[f"meta.{proto}.{name}"] = meta_enabled
 
 
 class Query:
@@ -268,7 +266,7 @@ class Query:
             flt = flt[1:]
         array_modes = ["ANY", "ALL", "ONE", "NONE"]
         for array_mode in array_modes:
-            if flt.startswith(array_mode + " "):
+            if flt.startswith(f"{array_mode} "):
                 clause["array_mode"] = array_mode
                 flt = flt[len(array_mode) + 1 :]
                 break

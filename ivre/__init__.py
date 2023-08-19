@@ -55,14 +55,12 @@ def _get_version_from_git() -> str:
         if proc.returncode != 0:
             raise subprocess.CalledProcessError(proc.returncode, err)
     tag = out.decode().strip()
-    match = re.match("^v?(.+?)-(\\d+)-g[a-f0-9]+$", tag)
-    if match:
+    if match := re.match("^v?(.+?)-(\\d+)-g[a-f0-9]+$", tag):
         # remove the 'v' prefix and add a '.devN' suffix
-        value = "%s.dev%s" % cast(Tuple[str, str], match.groups())
+        return "%s.dev%s" % cast(Tuple[str, str], match.groups())
     else:
         # just remove the 'v' prefix
-        value = tag[1:] if tag.startswith("v") else tag
-    return value
+        return tag[1:] if tag.startswith("v") else tag
 
 
 def _version() -> str:
@@ -87,9 +85,7 @@ def _version() -> str:
         return next(ref[6:] for ref in refnames.split(", ") if ref.startswith("tag: v"))
     except StopIteration:
         pass
-    if not hashval or hashval == "$Format:%h":
-        return "unknown.version"
-    return hashval
+    return "unknown.version" if not hashval or hashval == "$Format:%h" else hashval
 
 
 __version__ = VERSION = _version()

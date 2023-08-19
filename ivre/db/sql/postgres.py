@@ -101,7 +101,7 @@ class PostgresDB(SQLDB):
         if extracols is not None:
             cols.extend(extracols)
         t = Table(
-            "tmp_%s" % table.__tablename__,
+            f"tmp_{table.__tablename__}",
             table.__table__.metadata,
             *cols,
             prefixes=["TEMPORARY"],
@@ -114,9 +114,7 @@ class PostgresDB(SQLDB):
 
     def explain(self, req, **_):
         req_comp = req.compile(dialect=postgresql.dialect())
-        arg_dic = {}
-        for k in req_comp.params:
-            arg_dic[k] = repr(req_comp.params[k])
+        arg_dic = {k: repr(req_comp.params[k]) for k in req_comp.params}
         req_cur = self.db.execute(text("EXPLAIN " + req_comp.string % arg_dic))
         return "\n".join(map(" ".join, req_cur.fetchall()))
 

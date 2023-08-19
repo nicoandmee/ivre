@@ -107,15 +107,15 @@ def _extract_passive_HTTP_SERVER_HEADER(rec):
         version = rec["value"].split(":", 1)[0]
         add_cpe_values(
             host,
-            "ports.port:%s" % port["port"],
-            ["cpe:/a:microsoft:sharepoint_server:%s" % version],
+            f'ports.port:{port["port"]}',
+            [f"cpe:/a:microsoft:sharepoint_server:{version}"],
         )
         host["cpes"] = list(host["cpes"].values())
         # Let's pretend the application is on '/UNKNOWN/'
         port["scripts"] = [
             {
                 "id": "http-app",
-                "output": "SharePoint: path /UNKNOWN/, version %s" % (version),
+                "output": f"SharePoint: path /UNKNOWN/, version {version}",
                 "http-app": [
                     {
                         "path": "/UNKNOWN/",
@@ -138,13 +138,13 @@ def _extract_passive_HTTP_SERVER_HEADER(rec):
     nmap_info = utils.match_nmap_svc_fp(
         output=banner, proto=rec.get("protocol", "tcp"), probe="GetRequest"
     )
-    add_cpe_values(host, "ports.port:%s" % port, nmap_info.pop("cpe", []))
+    add_cpe_values(host, f"ports.port:{port}", nmap_info.pop("cpe", []))
     host["cpes"] = list(host["cpes"].values())
     for cpe in host["cpes"]:
         cpe["origins"] = sorted(cpe["origins"])
     if not host["cpes"]:
         del host["cpes"]
-    port.update(nmap_info)
+    port |= nmap_info
     add_service_hostname(nmap_info, host.setdefault("hostnames", []))
     return host
 
@@ -202,13 +202,13 @@ def _extract_passive_TCP_SERVER_BANNER(rec):
         "scripts": [{"id": "banner", "output": value}],
     }
     host = {"ports": [port]}
-    port.update(rec.get("infos", {}))
+    port |= rec.get("infos", {})
     nmap_info = utils.match_nmap_svc_fp(
         output=utils.nmap_decode_data(value),
         proto=rec.get("protocol", "tcp"),
         probe="NULL",
     )
-    add_cpe_values(host, "ports.port:%s" % port, nmap_info.pop("cpe", []))
+    add_cpe_values(host, f"ports.port:{port}", nmap_info.pop("cpe", []))
     host["cpes"] = list(host["cpes"].values())
     for cpe in host["cpes"]:
         cpe["origins"] = sorted(cpe["origins"])
@@ -227,7 +227,7 @@ def _extract_passive_HONEYPOT_HIT(rec):
         utils.LOGGER.warning("Unknown source in record [%r]", rec)
         return {}
     scanned_port = int(scanned_port)
-    output = "Scanned port: %s" % rec["source"].replace("/", ": ")
+    output = f'Scanned port: {rec["source"].replace("/", ": ")}'
     structured_output = {
         "ports": {"count": 1, scanned_proto: {"count": 1, "ports": [scanned_port]}}
     }
@@ -272,7 +272,7 @@ def _extract_passive_HTTP_HONEYPOT_REQUEST(rec):
     except ValueError:
         utils.LOGGER.warning("Cannot parse record [%r]", rec)
         return {}
-    port = int(port)
+    port = port
     output = "Scanned port: %s: %d\nScanned HTTP URI: %s (%s %s)" % (
         proto,
         port,
@@ -353,7 +353,6 @@ def _extract_passive_SSH_HASSH(rec):
     ssh2-enum-algos Nmap script (with less data).
 
     """
-    script = {"id": "ssh2-enum-algos"}
     script_structured = {}
     try:
         (
@@ -374,7 +373,7 @@ def _extract_passive_SSH_HASSH(rec):
         if key in script_structured:
             value = script_structured[key]
             script_output.append("  %s (%d)" % (key, len(value)))
-            script_output.extend("      %s" % v for v in value)
+            script_output.extend(f"      {v}" for v in value)
     script_structured["hassh"] = {
         "version": "1.1",
         "raw": rec["infos"]["raw"],
@@ -387,14 +386,17 @@ def _extract_passive_SSH_HASSH(rec):
             "",
             "  HASSH",
             "    version: 1.1",
-            "    raw: %s" % rec["infos"]["raw"],
-            "    md5: %s" % rec["value"],
-            "    sha1: %s" % rec["infos"]["sha1"],
-            "    sha256: %s" % rec["infos"]["sha256"],
+            f'    raw: {rec["infos"]["raw"]}',
+            f'    md5: {rec["value"]}',
+            f'    sha1: {rec["infos"]["sha1"]}',
+            f'    sha256: {rec["infos"]["sha256"]}',
         ]
     )
-    script["output"] = "\n".join(script_output)
-    script["ssh2-enum-algos"] = script_structured
+    script = {
+        "id": "ssh2-enum-algos",
+        "output": "\n".join(script_output),
+        "ssh2-enum-algos": script_structured,
+    }
     port = {
         "scripts": [script],
     }
@@ -428,9 +430,7 @@ def _extract_passive_SSL_CLIENT(rec):
         return _extract_passive_SSL_cert(rec, server=False)
     if source == "cacert":
         return _extract_passive_SSL_cert(rec, cacert=True, server=False)
-    if source == "ja3":
-        return _extract_passive_SSL_CLIENT_ja3(rec)
-    return {}
+    return _extract_passive_SSL_CLIENT_ja3(rec) if source == "ja3" else {}
 
 
 def _extract_passive_SSL_cert(rec, cacert=False, server=True):
@@ -447,14 +447,11 @@ def _extract_passive_SSL_cert(rec, cacert=False, server=True):
         port = {
             "port": -1,
         }
-    info = rec["infos"]
     host = {"ports": [port]}
-    if info:
-        pem = []
-        pem.append("-----BEGIN CERTIFICATE-----")
+    if info := rec["infos"]:
+        pem = ["-----BEGIN CERTIFICATE-----"]
         pem.extend(wrap(rec["value"], 64))
-        pem.append("-----END CERTIFICATE-----")
-        pem.append("")
+        pem.extend(("-----END CERTIFICATE-----", ""))
         info["pem"] = "\n".join(pem)
         script["output"] = "\n".join(create_ssl_output(info))
         script["ssl-cert"] = [info]
@@ -468,14 +465,16 @@ def _extract_passive_SSL_cert(rec, cacert=False, server=True):
 
 
 def _extract_passive_SSL_SERVER_ja3(rec):
-    script = {"id": "ssl-ja3-server"}
     port = {
         "state_state": "open",
         "state_reason": "passive",
         "port": rec["port"],
         "protocol": rec.get("protocol", "tcp"),
     }
-    script["output"] = rec["value"] + " - " + rec["source"][4:]
+    script = {
+        "id": "ssl-ja3-server",
+        "output": rec["value"] + " - " + rec["source"][4:],
+    }
     info = {"md5": rec["value"], "client": {"md5": rec["source"][4:]}}
     if "infos" in rec:
         for k in ["raw", "sha256", "sha1"]:
@@ -539,8 +538,7 @@ def _extract_passive_DNS_HONEYPOT_QUERY(rec):
 
 def _extract_passive_SSL_CLIENT_ja3(rec):
     """Handle SSL client ja3 extraction."""
-    script = {"id": "ssl-ja3-client"}
-    script["output"] = rec["value"]
+    script = {"id": "ssl-ja3-client", "output": rec["value"]}
     info = {"md5": rec["value"]}
     if "infos" in rec:
         for k in ["raw", "sha256", "sha1"]:
@@ -584,11 +582,11 @@ def _extract_passive_OPEN_PORT(rec):
 
 def _extract_passive_NTLM(rec, service=None):
     """Handle NTLM"""
-    script = {}
-    script["id"] = "ntlm-info"
-    script["ntlm-info"] = rec["infos"]
-    script["output"] = "\n".join("{}: {}".format(k, v) for k, v in rec["infos"].items())
-
+    script = {
+        "id": "ntlm-info",
+        "ntlm-info": rec["infos"],
+        "output": "\n".join(f"{k}: {v}" for k, v in rec["infos"].items()),
+    }
     port = {}
     if "port" in rec:
         port["state_state"] = "open"
@@ -627,11 +625,11 @@ def _extract_passive_SMB_SESSION_SETUP(rec):
     keyvals = zip(
         smb_values, (rec["infos"][k] if k in rec["infos"] else "" for k in smb_keys)
     )
-    script = {"id": "smb-os-discovery"}
-    script["smb-os-discovery"] = rec["infos"]
-    script["output"] = "\n".join(
-        ("{}: {}".format(k, v) if v else "") for k, v in keyvals
-    )
+    script = {
+        "id": "smb-os-discovery",
+        "smb-os-discovery": rec["infos"],
+        "output": "\n".join(f"{k}: {v}" if v else "" for k, v in keyvals),
+    }
     port = {}
     if "port" in rec:
         port["state_state"] = "open"
@@ -656,10 +654,7 @@ def _extract_passive_STUN_HONEYPOT_REQUEST(rec):
     # store TID as string
     tid = "%016x%016x" % (tid_hi, tid_lo)
     # special case when first int of tid is magic
-    if tid_hi >> 32 == 0x2112A442:
-        magic = 0x2112A442
-    else:
-        magic = None
+    magic = 0x2112A442 if tid_hi >> 32 == 0x2112A442 else None
     output = "Scanned port: %s: %d\nSTUN request (%stid: %s)" % (
         proto,
         port,
@@ -763,8 +758,7 @@ def passive_record_to_view(rec, category=None):
     # a DNS_ANSWER record is not enough to mark a host as up
     if rec["recontype"] != "DNS_ANSWER":
         outrec["state"] = "up"
-    sensor = rec.get("sensor")
-    if sensor:
+    if sensor := rec.get("sensor"):
         outrec["source"] = [sensor]
     # This (using "lastseen" from the passive record as both "starttime" and
     # "endtime" in the view record) might be surprising **but** it makes sense
@@ -779,7 +773,7 @@ def passive_record_to_view(rec, category=None):
     function = _EXTRACTORS.get(rec["recontype"], lambda _: {})
     if isinstance(function, dict):
         function = function.get(rec["source"], lambda _: {})
-    outrec.update(function(rec))
+    outrec |= function(rec)
     if category is not None:
         outrec["categories"] = [category]
     return outrec

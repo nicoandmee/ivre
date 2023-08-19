@@ -204,10 +204,16 @@ class MongoDB(DB):
         suitable to be passed to Cursor.hint().
 
         """
-        for fieldname, hint in self.hint_indexes[self.column_passive].items():
-            if fieldname in spec:
-                return hint
-        return None
+        return next(
+            (
+                hint
+                for fieldname, hint in self.hint_indexes[
+                    self.column_passive
+                ].items()
+                if fieldname in spec
+            ),
+            None,
+        )
 
     @property
     def db_client(self):
@@ -246,14 +252,14 @@ class MongoDB(DB):
             fields = {}
             for fld, value in kargs["projection"].items():
                 if fld in self.ipaddr_fields:
-                    fields.update({f"{fld}_0": value, f"{fld}_1": value})
+                    fields |= {f"{fld}_0": value, f"{fld}_1": value}
                 else:
                     fields[fld] = value
             kargs["projection"] = fields
         sort = []
         for fld, way in kargs.pop("sort", []) or []:
             if fld in self.ipaddr_fields:
-                sort.extend([("%s_0" % fld, way), ("%s_1" % fld, way)])
+                sort.extend([(f"{fld}_0", way), (f"{fld}_1", way)])
             elif fld == "text":
                 if isinstance(kargs.get("projection"), list):
                     kargs = dict.fromkeys(kargs["projection"], 1)
@@ -328,13 +334,11 @@ class MongoDB(DB):
                 version,
                 new_version,
             )
-            # Ensuring new indexes
-            new_indexes = (
+            if new_indexes := (
                 self.schema_migrations_indexes[colnum]
                 .get(new_version, {})
                 .get("ensure", [])
-            )
-            if new_indexes:
+            ):
                 utils.LOGGER.info(
                     "Creating new indexes...",
                 )
@@ -390,7 +394,7 @@ class MongoDB(DB):
             ):
                 if action == "ensure":
                     continue
-                function = getattr(self.db[self.columns[colnum]], "%s_index" % action)
+                function = getattr(self.db[self.columns[colnum]], f"{action}_index")
                 for idx in indexes:
                     try:
                         function(idx[0], **idx[1])
@@ -465,12 +469,12 @@ class MongoDB(DB):
         for i in range(field.count("."), -1, -1):
             subfield = field.rsplit(".", i)[0]
             if subfield in self.list_fields:
-                pipeline += [{"$unwind": "$" + subfield}]
+                pipeline += [{"$unwind": f"${subfield}"}]
         pipeline += specialflt
         # next step for previous hack
-        project = {"field": "$%s" % field}
+        project = {"field": f"${field}"}
         if countfield is not None:
-            project["count"] = "$%s" % countfield
+            project["count"] = f"${countfield}"
         pipeline += [{"$project": project}]
         if aggrflt:
             pipeline += [{"$match": aggrflt}]
@@ -485,10 +489,7 @@ class MongoDB(DB):
                 }
             }
         ]
-        if least:
-            pipeline += [{"$sort": {"count": 1}}]
-        else:
-            pipeline += [{"$sort": {"count": -1}}]
+        pipeline += [{"$sort": {"count": 1}}] if least else [{"$sort": {"count": -1}}]
         if topnbr is not None:
             pipeline += [{"$limit": topnbr}]
         return pipeline
@@ -515,10 +516,10 @@ class MongoDB(DB):
         for i in range(field.count("."), -1, -1):
             subfield = field.rsplit(".", i)[0]
             if subfield in self.list_fields:
-                pipeline += [{"$unwind": "$" + subfield}]
+                pipeline += [{"$unwind": f"${subfield}"}]
         if is_ipfield:
-            pipeline.append({"$project": {field: ["$%s_0" % field, "$%s_1" % field]}})
-        pipeline.append({"$group": {"_id": "$%s" % field}})
+            pipeline.append({"$project": {field: [f"${field}_0", f"${field}_1"]}})
+        pipeline.append({"$group": {"_id": f"${field}"}})
         return pipeline
 
     def _distinct(self, column, field, flt=None, sort=None, limit=None, skip=None):
@@ -548,11 +549,11 @@ class MongoDB(DB):
         )
         project = [port]
         if use_service:
-            project.append("%s.service_name" % service_base)
+            project.append(f"{service_base}.service_name")
             if use_product:
-                project.append("%s.service_product" % service_base)
+                project.append(f"{service_base}.service_product")
                 if use_version:
-                    project.append("%s.service_version" % service_base)
+                    project.append(f"{service_base}.service_version")
         project = {"field": project}
         pipeline.extend(
             [
@@ -669,8 +670,8 @@ class MongoDB(DB):
         fieldname is the internal name of the addr field
         """
         addr = cls.ip2internal(addr)
-        addr_0 = "%s_0" % fieldname
-        addr_1 = "%s_1" % fieldname
+        addr_0 = f"{fieldname}_0"
+        addr_1 = f"{fieldname}_1"
         if neg:
             return {"$or": [{addr_0: {"$ne": addr[0]}}, {addr_1: {"$ne": addr[1]}}]}
         return {addr_0: addr[0], addr_1: addr[1]}
@@ -703,8 +704,8 @@ class MongoDB(DB):
         """
         start = cls.ip2internal(start)
         stop = cls.ip2internal(stop)
-        addr_0 = "%s_0" % fieldname
-        addr_1 = "%s_1" % fieldname
+        addr_0 = f"{fieldname}_0"
+        addr_1 = f"{fieldname}_1"
         if neg:
             return {
                 "$or": [
@@ -1400,7 +1401,7 @@ class MongoDBActive(MongoDB, DBActive):
         update = {"$set": {"schema_version": 3}}
         updated_ports = False
         updated_scripts = False
-        migrate_scripts = set(["afp-ls", "nfs-ls", "smb-ls", "ftp-anon", "http-ls"])
+        migrate_scripts = {"afp-ls", "nfs-ls", "smb-ls", "ftp-anon", "http-ls"}
         for port in doc.get("ports", []):
             for script in port.get("scripts", []):
                 if script["id"] in migrate_scripts:
@@ -1479,9 +1480,11 @@ class MongoDBActive(MongoDB, DBActive):
         assert doc["schema_version"] == 5
         update = {"$set": {"schema_version": 6}}
         updated = False
-        migrate_scripts = set(
-            script for script, alias in ALIASES_TABLE_ELEMS.items() if alias == "vulns"
-        )
+        migrate_scripts = {
+            script
+            for script, alias in ALIASES_TABLE_ELEMS.items()
+            if alias == "vulns"
+        }
         for port in doc.get("ports", []):
             for script in port.get("scripts", []):
                 if script["id"] in migrate_scripts:
@@ -1787,10 +1790,7 @@ class MongoDBActive(MongoDB, DBActive):
                     if "http-server-header" in script:
                         data = script["http-server-header"]
                         if isinstance(data, dict):
-                            if "Server" in data:
-                                script["http-server-header"] = [data["Server"]]
-                            else:
-                                script["http-server-header"] = []
+                            script["http-server-header"] = [data["Server"]] if "Server" in data else []
                             updated = True
                     else:
                         script["http-server-header"] = [
@@ -2401,16 +2401,14 @@ class MongoDBActive(MongoDB, DBActive):
 
     @classmethod
     def searchmac(cls, mac=None, neg=False):
-        if mac is not None:
-            if isinstance(mac, utils.REGEXP_T):
-                mac = re.compile(mac.pattern, mac.flags | re.I)
-                if neg:
-                    return {"addresses.mac": {"$not": mac}}
-                return {"addresses.mac": mac}
-            if neg:
-                return {"addresses.mac": {"$ne": mac.lower()}}
-            return {"addresses.mac": mac.lower()}
-        return {"addresses.mac": {"$exists": not neg}}
+        if mac is None:
+            return {"addresses.mac": {"$exists": not neg}}
+        if isinstance(mac, utils.REGEXP_T):
+            mac = re.compile(mac.pattern, mac.flags | re.I)
+            return {"addresses.mac": {"$not": mac}} if neg else {"addresses.mac": mac}
+        if neg:
+            return {"addresses.mac": {"$ne": mac.lower()}}
+        return {"addresses.mac": mac.lower()}
 
     @staticmethod
     def searchcategory(cat, neg=False):
@@ -2469,7 +2467,7 @@ class MongoDBActive(MongoDB, DBActive):
         if port == "host":
             return {"ports.port": {"$gte": 0} if neg else -1}
         if state == "open":
-            return {"openports.%s.ports" % protocol: {"$ne": port} if neg else port}
+            return {f"openports.{protocol}.ports": {"$ne": port} if neg else port}
         if neg:
             return {
                 "$or": [
@@ -2615,7 +2613,7 @@ class MongoDBActive(MongoDB, DBActive):
         if protocol is not None:
             flt["protocol"] = protocol
         if len(flt) == 1:
-            return {"ports.%s" % key: value for key, value in flt.items()}
+            return {f"ports.{key}": value for key, value in flt.items()}
         return {"ports": {"$elemMatch": flt}}
 
     @classmethod
@@ -2630,7 +2628,7 @@ class MongoDBActive(MongoDB, DBActive):
             req["output"] = output
         if values:
             if isinstance(name, list):
-                all_keys = set(ALIASES_TABLE_ELEMS.get(n, n) for n in name)
+                all_keys = {ALIASES_TABLE_ELEMS.get(n, n) for n in name}
                 if len(all_keys) != 1:
                     raise TypeError(
                         ".searchscript() needs similar `name` values when using a `values` arg"
@@ -2644,19 +2642,18 @@ class MongoDBActive(MongoDB, DBActive):
                 key = ALIASES_TABLE_ELEMS.get(name, name)
             if isinstance(values, (str, utils.REGEXP_T)):
                 req[key] = values
+            elif len(values) >= 2 and f"ports.scripts.{key}" in cls.list_fields:
+                req[key] = {"$elemMatch": values}
             else:
-                if len(values) >= 2 and "ports.scripts.%s" % key in cls.list_fields:
-                    req[key] = {"$elemMatch": values}
-                else:
-                    for field, value in values.items():
-                        req["%s.%s" % (key, field)] = value
+                for field, value in values.items():
+                    req[f"{key}.{field}"] = value
         if not req:
             return {"ports.scripts": {"$exists": not neg}}
         if len(req) == 1:
             field, value = next(iter(req.items()))
             if neg:
-                return {"ports.scripts.%s" % field: {"$ne": value}}
-            return {"ports.scripts.%s" % field: value}
+                return {f"ports.scripts.{field}": {"$ne": value}}
+            return {f"ports.scripts.{field}": value}
         if neg:
             return {"ports.scripts": {"$not": {"$elemMatch": req}}}
         return {"ports.scripts": {"$elemMatch": req}}
@@ -2746,7 +2743,7 @@ class MongoDBActive(MongoDB, DBActive):
                 "shares": {
                     "$elemMatch": {
                         "$or": [
-                            {"%s access" % user: access}
+                            {f"{user} access": access}
                             for user in ["Anonymous", "Current user"]
                         ],
                         "Type": share_type,
@@ -3019,7 +3016,7 @@ class MongoDBActive(MongoDB, DBActive):
             return {"cpes": {"$exists": True}}
         if nflt == 1:
             field, value = flt.popitem()
-            return {"cpes.%s" % field: value}
+            return {f"cpes.{field}": value}
         return {"cpes": {"$elemMatch": flt}}
 
     @classmethod

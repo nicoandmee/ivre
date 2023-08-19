@@ -42,7 +42,7 @@ def _scriptoutput(record):
             if not scriptout:
                 scriptout = ""
             elif len(scriptout) == 1:
-                scriptout = " " + scriptout[0]
+                scriptout = f" {scriptout[0]}"
             else:
                 scriptout = "\n\t\t\t%s" % "\n\t\t\t".join(scriptout)
         else:
@@ -58,23 +58,17 @@ def displayhost(
     result contained in `record`.
 
     """
-    line = "Host %s" % utils.force_int2ip(record["addr"])
+    line = f'Host {utils.force_int2ip(record["addr"])}'
     if record.get("hostnames"):
-        line += " (%s)" % "/".join(x["name"] for x in record["hostnames"])
+        line += f' ({"/".join(x["name"] for x in record["hostnames"])})'
     if "source" in record:
-        line += " from %s" % (
-            "/".join(record["source"])
-            if isinstance(record["source"], list)
-            else record["source"]
-        )
+        line += f' from {"/".join(record["source"]) if isinstance(record["source"], list) else record["source"]}'
     if record.get("categories"):
-        line += " (%s)" % ", ".join(
-            cat for cat in record["categories"] if not cat.startswith("_")
-        )
+        line += f' ({", ".join(cat for cat in record["categories"] if not cat.startswith("_"))})'
     if "state" in record:
-        line += " (%s" % record["state"]
+        line += f' ({record["state"]}'
         if "state_reason" in record:
-            line += ": %s" % record["state_reason"]
+            line += f': {record["state_reason"]}'
         line += ")\n"
     out.write(line)
     if "infos" in record:
@@ -85,7 +79,7 @@ def displayhost(
                 % (infos.get("country_code", "?"), infos.get("country_name", "?"))
             )
             if "city" in infos:
-                out.write(" - %s" % infos["city"])
+                out.write(f' - {infos["city"]}')
             out.write("\n")
         if "as_num" in infos or "as_name" in infos:
             out.write(
@@ -120,34 +114,29 @@ def displayhost(
                 record["scripts"] = port["scripts"]
             continue
         if "state_reason" in port:
-            reason = " (%s)" % ", ".join(
-                [port["state_reason"]]
-                + [
-                    "%s=%s" % (field[13:], value)
-                    for field, value in port.items()
-                    if field.startswith("state_reason_")
-                ]
-            )
+            reason = f' ({", ".join([port["state_reason"]] + [f"{field[13:]}={value}" for field, value in port.items() if field.startswith("state_reason_")])})'
         else:
             reason = ""
         srv = []
         if "service_name" in port:
             srv.append("")
             if "service_tunnel" in port:
-                srv.append("%s/%s" % (port["service_name"], port["service_tunnel"]))
+                srv.append(f'{port["service_name"]}/{port["service_tunnel"]}')
             else:
                 srv.append(port["service_name"])
             if "service_method" in port:
-                srv.append("(%s)" % port["service_method"])
-            for field in [
-                "service_product",
-                "service_version",
-                "service_extrainfo",
-                "service_ostype",
-                "service_hostname",
-            ]:
-                if field in port:
-                    srv.append(port[field])
+                srv.append(f'({port["service_method"]})')
+            srv.extend(
+                port[field]
+                for field in [
+                    "service_product",
+                    "service_version",
+                    "service_extrainfo",
+                    "service_ostype",
+                    "service_hostname",
+                ]
+                if field in port
+            )
         out.write(
             "\t%-10s%-8s%-22s%s\n"
             % (
@@ -160,17 +149,15 @@ def displayhost(
         if showscripts:
             out.writelines(_scriptoutput(port))
     if showscripts:
-        scripts = _scriptoutput(record)
-        if scripts:
+        if scripts := _scriptoutput(record):
             out.write("\tHost scripts:\n")
             out.writelines(scripts)
-    mac_addrs = record.get("addresses", {}).get("mac")
-    if mac_addrs:
+    if mac_addrs := record.get("addresses", {}).get("mac"):
         for addr in mac_addrs:
             out.write("\tMAC Address: %s" % addr)
             manuf = utils.mac2manuf(addr)
             if manuf and manuf[0]:
-                out.write(" (%s)" % manuf[0])
+                out.write(f" ({manuf[0]})")
             out.write("\n")
     if showtraceroute and record.get("traces"):
         for trace in record["traces"]:

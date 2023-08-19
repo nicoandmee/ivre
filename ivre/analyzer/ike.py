@@ -230,14 +230,14 @@ def info_from_notification(
             "ISAKMP: Notification payload to short (%d bytes)" % payload_len
         )
         return
-    output.update(
-        {
-            "DOI": DOI[struct.unpack(">I", payload[4:8])[0]],
-            "protocol_id": PROTO[payload[8]],
-            "notification_type": NOTIFICATION[struct.unpack(">H", payload[10:12])[0]],
-            # "notification_data": payload[12:],
-        }
-    )
+    output |= {
+        "DOI": DOI[struct.unpack(">I", payload[4:8])[0]],
+        "protocol_id": PROTO[payload[8]],
+        "notification_type": NOTIFICATION[
+            struct.unpack(">H", payload[10:12])[0]
+        ],
+        # "notification_data": payload[12:],
+    }
 
 
 def info_from_vendorid(
@@ -261,23 +261,19 @@ def info_from_vendorid(
             service["service_version"] = name.decode().split(None, 3)[3]
         elif name.startswith(b"SSH Sentinel"):
             service["service_product"] = "SSH Communications Security Sentinel"
-            version = name[13:].decode()
-            if version:
+            if version := name[13:].decode():
                 service["service_version"] = version
         elif name.startswith(b"SSH QuickSec"):
             service["service_product"] = "SSH Communications Security QuickSec"
-            version = name[13:].decode()
-            if version:
+            if version := name[13:].decode():
                 service["service_version"] = version
         elif name.startswith(b"Cisco VPN Concentrator"):
             service["service_product"] = "Cisco VPN Concentrator"
-            version = name[24:-1].decode()
-            if version:
+            if version := name[24:-1].decode():
                 service["service_version"] = version
         elif name.startswith(b"SafeNet SoftRemote"):
             service["service_product"] = "SafeNet Remote"
-            version = name[19:].decode()
-            if version:
+            if version := name[19:].decode():
                 service["service_version"] = version
         elif name == b"KAME/racoon":
             service["service_product"] = "KAME/racoon/IPsec Tools"
@@ -327,8 +323,7 @@ def info_from_vendorid(
             service["service_devicetype"] = "firewall"
         elif name.startswith(b"Symantec-Raptor"):
             service["service_product"] = "Symantec-Raptor"
-            version = name[16:].decode()
-            if version:
+            if version := name[16:].decode():
                 service["service_version"] = version
             service["service_devicetype"] = "firewall"
         elif name == b"Teldat":
@@ -347,11 +342,7 @@ def info_from_sa(payload: bytes, _: NmapServiceMatch, output: Dict[str, Any]) ->
             "ISAKMP: SA payload to short (%d bytes)" % payload_len
         )
         return
-    output.update(
-        {
-            "DOI": DOI[struct.unpack(">I", payload[4:8])[0]],
-        }
-    )
+    output["DOI"] = DOI[struct.unpack(">I", payload[4:8])[0]]
     payload = payload[20:]
     payload_type = 3
     while payload_type == 3 and payload:
@@ -431,19 +422,18 @@ def analyze_ike_payload(payload: bytes, probe: str = "ike") -> NmapPort:
     txtoutput = []
     if "transforms" in output:
         txtoutput.append("Transforms:")
-        for tr in output["transforms"]:
-            txtoutput.append(
-                "  - %s"
-                % ", ".join(
-                    "%s: %s" % (key, value) for key, value in sorted(tr.items())
-                )
-            )
+        txtoutput.extend(
+            f'  - {", ".join(f"{key}: {value}" for key, value in sorted(tr.items()))}'
+            for tr in output["transforms"]
+        )
     if "vendor_ids" in output:
         txtoutput.append("Vendor IDs:")
-        for vid in output["vendor_ids"]:
-            txtoutput.append("  - %s" % vid.get("name", vid["value"]))
+        txtoutput.extend(
+            f'  - {vid.get("name", vid["value"])}'
+            for vid in output["vendor_ids"]
+        )
     if "notification_type" in output:
-        txtoutput.append("Notification: %s" % output["notification_type"])
+        txtoutput.append(f'Notification: {output["notification_type"]}')
     # sth identified, let's assume it was correct
     result: NmapPort = {
         "service_name": "isakmp",

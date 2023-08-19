@@ -67,8 +67,7 @@ def buildgraph(
             if not include_last_hop and not include_target:
                 if hops[-1]["ipaddr"] == host["addr"]:
                     hops.pop()
-                if not include_last_hop:
-                    hops.pop()
+                hops.pop()
             for i, hop in enumerate(hops[1:]):
                 if (not only_connected) or (hop["ttl"] - hops[i]["ttl"] == 1):
                     graph.setdefault(hops[i]["ipaddr"], set()).update([hop["ipaddr"]])

@@ -80,33 +80,31 @@ class ZeekFile(Parser):
         directive = keyval[0]
         arg = keyval[1]
 
-        if directive == b"separator":
+        if directive == b"empty_field":
+            self.empty_field = arg
+        elif directive == b"fields":
+            self.fields = arg.split(self.sep)
+        elif directive == b"path":
+            self.path = arg.decode()
+        elif directive == b"separator":
             self.sep = decode_hex(arg[2:]) if arg.startswith(b"\\x") else arg
         elif directive == b"set_separator":
             self.set_sep = arg
-        elif directive == b"empty_field":
-            self.empty_field = arg
-        elif directive == b"unset_field":
-            self.unset_field = arg
-        elif directive == b"path":
-            self.path = arg.decode()
-        elif directive == b"open":
-            pass
-        elif directive == b"fields":
-            self.fields = arg.split(self.sep)
         elif directive == b"types":
             self.types = arg.split(self.sep)
+        elif directive == b"unset_field":
+            self.unset_field = arg
 
     def parse_line(self, line: bytes) -> Dict[str, Any]:
         if line.startswith(b"#"):
             self.parse_header_line(line)
             return next(self)
-        res = {}
         fields = line.split(self.sep)
 
-        for field, name, typ in zip(fields, self.fields, self.types):
-            res[name.replace(b".", b"_").decode()] = self.fix_value(field, typ)
-        return res
+        return {
+            name.replace(b".", b"_").decode(): self.fix_value(field, typ)
+            for field, name, typ in zip(fields, self.fields, self.types)
+        }
 
     def fix_value(
         self, val: bytes, typ: bytes
@@ -127,9 +125,7 @@ class ZeekFile(Parser):
             return float(val)
         if typ in self.time_types:
             return datetime.datetime.fromtimestamp(float(val))
-        if val == self.empty_field:
-            return ""
-        return val.decode()
+        return "" if val == self.empty_field else val.decode()
 
     @property
     def field_types(self) -> List[Tuple[bytes, bytes]]:

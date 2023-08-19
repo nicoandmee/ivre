@@ -60,9 +60,8 @@ class ElasticDB(DB):
                 self.hosts = [hostname]
         elif url.netloc:
             self.hosts = [url.netloc]
-        index_prefix = url.path.lstrip("/")
-        if index_prefix:
-            self.index_prefix = index_prefix + "-"
+        if index_prefix := url.path.lstrip("/"):
+            self.index_prefix = f"{index_prefix}-"
         else:
             self.index_prefix = "ivre-"
         self.params = dict(
@@ -195,7 +194,7 @@ def _create_mappings(nested, all_mappings):
         curkey = None
         for subkey in fld.split(".")[:-1]:
             if curkey is not None:
-                subkey = "%s.%s" % (curkey, subkey)
+                subkey = f"{curkey}.{subkey}"
             if cur.get(subkey, {}).get("type") == "nested":
                 cur = cur[subkey].setdefault("properties", {})
                 curkey = None
@@ -203,7 +202,7 @@ def _create_mappings(nested, all_mappings):
                 curkey = subkey
         subkey = fld.rsplit(".", 1)[-1]
         if curkey is not None:
-            subkey = "%s.%s" % (curkey, subkey)
+            subkey = f"{curkey}.{subkey}"
         cur[subkey] = {
             "type": "nested",
             # This is needed to use the nested fields in
@@ -216,7 +215,7 @@ def _create_mappings(nested, all_mappings):
             curkey = None
             for subkey in fld.split(".")[:-1]:
                 if curkey is not None:
-                    subkey = "%s.%s" % (curkey, subkey)
+                    subkey = f"{curkey}.{subkey}"
                 if cur.get(subkey, {}).get("type") == "nested":
                     cur = cur[subkey].setdefault("properties", {})
                     curkey = None
@@ -224,7 +223,7 @@ def _create_mappings(nested, all_mappings):
                     curkey = subkey
             subkey = fld.rsplit(".", 1)[-1]
             if curkey is not None:
-                subkey = "%s.%s" % (curkey, subkey)
+                subkey = f"{curkey}.{subkey}"
             cur.setdefault(subkey, {})["type"] = fldtype
     return res
 

@@ -168,7 +168,7 @@ def create_ssl_output(info: ParsedCertificate) -> List[str]:
     out = []
     for key, name in [("subject_text", "Subject"), ("issuer_text", "Issuer")]:
         try:
-            out.append("%s: %s" % (name, info[key]))
+            out.append(f"{name}: {info[key]}")
         except KeyError:
             pass
     try:
@@ -177,7 +177,7 @@ def create_ssl_output(info: ParsedCertificate) -> List[str]:
         pass
     else:
         try:
-            out.append("Public Key type: %s" % pubkey["type"])
+            out.append(f'Public Key type: {pubkey["type"]}')
         except KeyError:
             pass
         try:
@@ -189,11 +189,10 @@ def create_ssl_output(info: ParsedCertificate) -> List[str]:
         ("not_after", "Not valid after:  "),
     ]:
         try:
-            out.append("%s%s" % (name, info[key]))
+            out.append(f"{name}{info[key]}")
         except KeyError:
             pass
-    for san in info.get("san", []):
-        out.append("Subject Alternative Name: %s" % san)
+    out.extend(f"Subject Alternative Name: {san}" for san in info.get("san", []))
     for key, name in [("md5", "MD5:"), ("sha1", "SHA-1:"), ("sha256", "SHA-256:")]:
         # NB: SHA-256 is not (yet) reported by Nmap, but it might help.
         try:
@@ -221,11 +220,9 @@ def create_ssl_cert(
         data = encode_b64(cert)
     info = get_cert_info(cert)
     b64cert = data.decode()
-    pem = []
-    pem.append("-----BEGIN CERTIFICATE-----")
+    pem = ["-----BEGIN CERTIFICATE-----"]
     pem.extend(wrap(b64cert, 64))
-    pem.append("-----END CERTIFICATE-----")
-    pem.append("")
+    pem.extend(("-----END CERTIFICATE-----", ""))
     info["pem"] = "\n".join(pem)
     return "\n".join(create_ssl_output(info)), [info]
 
@@ -344,9 +341,8 @@ def merge_axfr_scripts(
         return script
     res: List[Dict[str, Any]] = []
     for data in chain(curscript[script_id], script[script_id]):
-        if any(data["domain"] == r["domain"] for r in res):
-            continue
-        res.append(data)
+        if all(data["domain"] != r["domain"] for r in res):
+            res.append(data)
     res = sorted(res, key=lambda r: key_sort_dom(r["domain"]))
     line_fmt = "| %%-%ds  %%-%ds  %%s" % (
         max(len(r["name"]) for data in res for r in data["records"]),
@@ -442,14 +438,16 @@ def merge_scanner_scripts(
     output = []
     if res.get("ports"):
         output.append(
-            "Scanned port%s: %s"
-            % (
-                "s" if res["ports"]["count"] > 1 else "",
-                ", ".join(
-                    "%s: %s" % (proto, ports2nmapspec(ports["ports"]))
-                    for proto, ports in res.get("ports", {}).items()
-                    if proto != "count"
-                ),
+            (
+                "Scanned port%s: %s"
+                % (
+                    "s" if res["ports"]["count"] > 1 else "",
+                    ", ".join(
+                        f'{proto}: {ports2nmapspec(ports["ports"])}'
+                        for proto, ports in res.get("ports", {}).items()
+                        if proto != "count"
+                    ),
+                )
             )
         )
     if res.get("http_uris"):
@@ -459,18 +457,15 @@ def merge_scanner_scripts(
             uris_methods.setdefault(uri["uri"], set()).add(uri["method"])
             uris_versions.setdefault(uri["uri"], set()).add(uri["version"])
         output.append(
-            "Scanned URI%s: %s"
-            % (
-                "s" if len(uris_versions) > 1 else "",
-                ", ".join(
-                    "%s (%s %s)"
-                    % (
-                        uri,
-                        ", ".join(uris_methods[uri]),
-                        ", ".join(uris_versions[uri]),
-                    )
-                    for uri in sorted(uris_versions)
-                ),
+            (
+                "Scanned URI%s: %s"
+                % (
+                    "s" if len(uris_versions) > 1 else "",
+                    ", ".join(
+                        f'{uri} ({", ".join(uris_methods[uri])} {", ".join(uris_versions[uri])})'
+                        for uri in sorted(uris_versions)
+                    ),
+                )
             )
         )
     if res.get("dns_queries"):
@@ -480,18 +475,15 @@ def merge_scanner_scripts(
             queries_qtype.setdefault(query["query"], set()).add(query["qtype"])
             queries_qclass.setdefault(query["query"], set()).add(query["qclass"])
         output.append(
-            "DNS quer%s: %s"
-            % (
-                "ies" if len(queries_qtype) > 1 else "y",
-                ", ".join(
-                    "%s (type: %s, class: %s)"
-                    % (
-                        query,
-                        ", ".join(queries_qtype[query]),
-                        ", ".join(queries_qclass[query]),
-                    )
-                    for query in sorted(queries_qtype)
-                ),
+            (
+                "DNS quer%s: %s"
+                % (
+                    "ies" if len(queries_qtype) > 1 else "y",
+                    ", ".join(
+                        f'{query} (type: {", ".join(queries_qtype[query])}, class: {", ".join(queries_qclass[query])})'
+                        for query in sorted(queries_qtype)
+                    ),
+                )
             )
         )
     if scanners:
@@ -499,9 +491,7 @@ def merge_scanner_scripts(
         def _fmt_sc(sc: Dict[str, Any]) -> str:
             res = sc["name"]  # type: str
             if "probes" in sc:
-                res += " [%s]" % ", ".join(
-                    "%s/%s" % (x["name"], x["proto"]) for x in sc["probes"]
-                )
+                res += (" [%s]" % ", ".join(f'{x["name"]}/{x["proto"]}' for x in sc["probes"]))
             return res
 
         output.append(
@@ -561,10 +551,10 @@ def merge_dns_domains_scripts(
     }
     domains_order = sorted(domains, key=key_sort_dom)
     if len(domains_order) == 1:
-        output = "Server is authoritative for %s" % domains_order[0]
+        output = f"Server is authoritative for {domains_order[0]}"
     else:
         output = "Server is authoritative for:\n%s" % "\n".join(
-            "  %s" % dom for dom in domains_order
+            f"  {dom}" for dom in domains_order
         )
     curscript["output"] = output
     curscript[script_id] = [
@@ -588,14 +578,14 @@ def merge_dns_tls_rpt_scripts(
     for dom in domains_order:
         cur_data = domains[dom]
         if "warnings" not in cur_data:
-            output.append("Domain %s has a valid TLS-RPT configuration" % dom)
+            output.append(f"Domain {dom} has a valid TLS-RPT configuration")
             continue
         warnings = cur_data["warnings"]
         if warnings == ["Domain has no TLS-RPT configuration"]:
-            output.append("Domain %s has no TLS-RPT configuration" % dom)
+            output.append(f"Domain {dom} has no TLS-RPT configuration")
             continue
         if warnings == ["Domain has more than one TLS-RPT configuration"]:
-            output.append("Domain %s has more than one TLS-RPT configuration" % dom)
+            output.append(f"Domain {dom} has more than one TLS-RPT configuration")
             continue
         output.append(
             "Domain %s has a TLS-RPT configuration with warnings:\n%s"
@@ -664,22 +654,15 @@ def _merge_scripts(
     to_merge_list = []
     script_id_alias = ALIASES_TABLE_ELEMS.get(script_id, script_id)
     for to_add in script.setdefault(script_id_alias, []):
-        to_merge = True
-        for cur in curscript.get(script_id_alias, []):
-            if script_equals(to_add, cur, script_id):
-                to_merge = False
-                break
+        to_merge = not any(
+            script_equals(to_add, cur, script_id)
+            for cur in curscript.get(script_id_alias, [])
+        )
         if to_merge:
             to_merge_list.append(to_add)
     curscript.setdefault(script_id_alias, []).extend(to_merge_list)
-    # Compute output from curscript[script_id_alias]
-    output = []
-    for el in curscript[script_id_alias]:
-        output.append(script_output(el, script_id))
-    if output:
-        curscript["output"] = outsep.join(output) + "\n"
-    else:
-        curscript["output"] = ""
+    output = [script_output(el, script_id) for el in curscript[script_id_alias]]
+    curscript["output"] = outsep.join(output) + "\n" if output else ""
     return curscript
 
 
@@ -836,11 +819,8 @@ def merge_host_docs(
     for port in rec1.get("ports", []):
         if (port.get("protocol"), port["port"]) in ports:
             curport = ports[(port.get("protocol"), port["port"])]
-            if "scripts" in curport:
-                curport["scripts"] = curport["scripts"][:]
-            else:
-                curport["scripts"] = []
-            present_scripts = set(script["id"] for script in curport["scripts"])
+            curport["scripts"] = curport["scripts"][:] if "scripts" in curport else []
+            present_scripts = {script["id"] for script in curport["scripts"]}
             for script in port.get("scripts", []):
                 if script["id"] not in present_scripts:
                     curport["scripts"].append(script)
@@ -948,26 +928,23 @@ def create_http_ls(data: bytes, volname: str = "???") -> Optional[NmapScript]:
         return None
     files = []
     for pattern in _EXPR_FILES:
-        for match in pattern.finditer(data):
-            files.append(
-                {
-                    key: nmap_encode_data(value)
-                    for key, value in match.groupdict().items()
-                }
-            )
+        files.extend(
+            {
+                key: nmap_encode_data(value)
+                for key, value in match.groupdict().items()
+            }
+            for match in pattern.finditer(data)
+        )
     if not files:
         return None
-    output = []
-    output.append("Volume %s" % volname)
     title = ["size", "time", "filename"]
     column_width = [len(t) for t in title[:-1]]
     for fobj in files:
         for i, t in enumerate(title[:-1]):
             column_width[i] = max(column_width[i], len(fobj.get(t, "-")))
     line_fmt = "%%(size)-%ds  %%(time)-%ds  %%(filename)s" % tuple(column_width)
-    output.append(line_fmt % {t: t.upper() for t in title})
-    for fobj in files:
-        output.append(line_fmt % {"size": "-", "time": "-", **fobj})
+    output = [f"Volume {volname}", line_fmt % {t: t.upper() for t in title}]
+    output.extend(line_fmt % {"size": "-", "time": "-", **fobj} for fobj in files)
     output.append("")
     return {
         "id": "http-ls",
@@ -1004,7 +981,7 @@ def create_elasticsearch_service(data: bytes) -> Optional[NmapServiceMatch]:
             return None
         if not isinstance(error, dict):
             return None
-        if not (data_p.get("status") == 401 or error.get("status") == 401):
+        if data_p.get("status") != 401 and error.get("status") != 401:
             return None
         if "root_cause" in error:
             return {
@@ -1023,18 +1000,16 @@ def create_elasticsearch_service(data: bytes) -> Optional[NmapServiceMatch]:
     cpe = []
     if "version" in data_p and "number" in data_p["version"]:
         result["service_version"] = data_p["version"]["number"]
-        cpe.append(
-            "cpe:/a:elasticsearch:elasticsearch:%s" % data_p["version"]["number"]
-        )
+        cpe.append(f'cpe:/a:elasticsearch:elasticsearch:{data_p["version"]["number"]}')
     extrainfo = []
     if "name" in data_p:
-        extrainfo.append("name: %s" % data_p["name"])
+        extrainfo.append(f'name: {data_p["name"]}')
         result["service_hostname"] = data_p["name"]
     if "cluster_name" in data_p:
-        extrainfo.append("cluster: %s" % data_p["cluster_name"])
+        extrainfo.append(f'cluster: {data_p["cluster_name"]}')
     if "version" in data_p and "lucene_version" in data_p["version"]:
-        extrainfo.append("Lucene %s" % data_p["version"]["lucene_version"])
-        cpe.append("cpe:/a:apache:lucene:%s" % data_p["version"]["lucene_version"])
+        extrainfo.append(f'Lucene {data_p["version"]["lucene_version"]}')
+        cpe.append(f'cpe:/a:apache:lucene:{data_p["version"]["lucene_version"]}')
     if extrainfo:
         result["service_extrainfo"] = "; ".join(extrainfo)
     if cpe:
@@ -1089,8 +1064,7 @@ def handle_http_content(
     script_http_ls = create_http_ls(data, volname=path)
     if script_http_ls is not None:
         port.setdefault("scripts", []).append(script_http_ls)
-    service_elasticsearch = create_elasticsearch_service(data)
-    if service_elasticsearch:
+    if service_elasticsearch := create_elasticsearch_service(data):
         if "service_hostname" in service_elasticsearch:
             add_hostname(
                 service_elasticsearch["service_hostname"],
@@ -1098,7 +1072,7 @@ def handle_http_content(
                 host.setdefault("hostnames", []),
             )
         add_cpe_values(
-            host, "ports.port:%s" % port, service_elasticsearch.pop("cpe", [])
+            host, f"ports.port:{port}", service_elasticsearch.pop("cpe", [])
         )
         port.update(cast(NmapPort, service_elasticsearch))
 
@@ -1120,8 +1094,8 @@ def handle_http_headers(
         srv_headers = [
             h["value"] for h in headers if h["name"] == "server" and h["value"]
         ]
-        if srv_headers and not any(
-            s["id"] == "http-server-header" for s in port.get("scripts", [])
+        if srv_headers and all(
+            s["id"] != "http-server-header" for s in port.get("scripts", [])
         ):
             port.setdefault("scripts", []).append(
                 {
@@ -1144,12 +1118,12 @@ def handle_http_headers(
         version = header.split(":", 1)[0]
         add_cpe_values(
             host,
-            "ports.port:%s" % port.get("port", -1),
-            ["cpe:/a:microsoft:sharepoint_server:%s" % version],
+            f'ports.port:{port.get("port", -1)}',
+            [f"cpe:/a:microsoft:sharepoint_server:{version}"],
         )
         script = {
             "id": "http-app",
-            "output": "SharePoint: path %s, version %s" % (path, version),
+            "output": f"SharePoint: path {path}, version {version}",
             "http-app": [
                 {"path": path, "application": "SharePoint", "version": version}
             ],
@@ -1187,7 +1161,7 @@ def handle_http_headers(
             output = f"Kibana: path {path_k}"
             add_cpe_values(
                 host,
-                "ports.port:%s" % port.get("port", -1),
+                f'ports.port:{port.get("port", -1)}',
                 ["cpe:/a:elasticsearch:kibana"],
             )
         else:
@@ -1195,7 +1169,7 @@ def handle_http_headers(
             structured["version"] = version
             add_cpe_values(
                 host,
-                "ports.port:%s" % port.get("port", -1),
+                f'ports.port:{port.get("port", -1)}',
                 [f"cpe:/a:elasticsearch:kibana:{version}"],
             )
         script = {"id": "http-app", "output": output, "http-app": [structured]}

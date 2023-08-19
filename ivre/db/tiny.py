@@ -83,7 +83,7 @@ class TinyDB(DB):
         try:
             return self._db
         except AttributeError:
-            self._db = TDB(os.path.join(self.basepath, "%s.json" % self.dbname))
+            self._db = TDB(os.path.join(self.basepath, f"{self.dbname}.json"))
             return self._db
 
     def invalidate_cache(self):
@@ -124,20 +124,14 @@ class TinyDB(DB):
             fields = _fields
 
             def _extractor(rec, wanted_fields, base=""):
-                if isinstance(rec, Document):
-                    res = Document({}, doc_id=rec.doc_id)
-                else:
-                    res = {}
+                res = Document({}, doc_id=rec.doc_id) if isinstance(rec, Document) else {}
                 for fld, value in wanted_fields.items():
                     if fld not in rec:
                         continue
                     if value is True:
                         res[fld] = rec[fld]
                         continue
-                    if base:
-                        fullfld = "%s.%s" % (base, fld)
-                    else:
-                        fullfld = fld
+                    fullfld = f"{base}.{fld}" if base else fld
                     if fullfld in self.list_fields:
                         res[fld] = [
                             _extractor(subrec, value, base=fullfld)
@@ -170,9 +164,7 @@ class TinyDB(DB):
                     return -o
                 if f2 is None:
                     return o
-                if f1 < f2:
-                    return -o
-                return o
+                return -o if f1 < f2 else o
             return 0
 
         result = sorted(result, key=cmp_to_key(_cmp))
@@ -190,20 +182,14 @@ class TinyDB(DB):
             res = query.test(lambda val: any(value.search(subval) for subval in val))
         else:
             res = query.any([value])
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @staticmethod
     def _searchstring_re(query, value, neg=False):
         if isinstance(value, utils.REGEXP_T):
             res = query.search(value.pattern, flags=value.flags)
-            if neg:
-                return ~res
-            return res
-        if neg:
-            return query != value
-        return query == value
+            return ~res if neg else res
+        return query != value if neg else query == value
 
     @classmethod
     def _generate_field_values(
@@ -214,10 +200,7 @@ class TinyDB(DB):
         except ValueError:
             if field not in record:
                 return
-            if base:
-                fullfield = "%s.%s" % (base, field)
-            else:
-                fullfield = field
+            fullfield = f"{base}.{field}" if base else field
             if fullfield in cls.list_fields:
                 for val in record[field]:
                     if countval is not None:
@@ -236,27 +219,26 @@ class TinyDB(DB):
         if cur not in record:
             return
         if countfield is not None:
-            if countfield.startswith("%s." % cur):
+            if countfield.startswith(f"{cur}."):
                 countfield = countfield.split(".", 1)[1]
             else:
                 countval = record.get(countfield, 1)
                 countfield = None
         record = record[cur]
-        if base:
-            base = "%s.%s" % (base, cur)
-        else:
-            base = cur
+        base = f"{base}.{cur}" if base else cur
         if base in cls.list_fields:
             for subrec in record:
-                for val in cls._generate_field_values(
-                    subrec, field, base=base, countfield=countfield, countval=countval
-                ):
-                    yield val
+                yield from cls._generate_field_values(
+                    subrec,
+                    field,
+                    base=base,
+                    countfield=countfield,
+                    countval=countval,
+                )
         else:
-            for val in cls._generate_field_values(
+            yield from cls._generate_field_values(
                 record, field, base=base, countfield=countfield, countval=countval
-            ):
-                yield val
+            )
 
     @classmethod
     def _search_field_exists(cls, field, base="", baseq=None):
@@ -265,10 +247,7 @@ class TinyDB(DB):
         if "." not in field:
             return getattr(baseq, field).exists()
         field, nextfields = field.split(".", 1)
-        if base:
-            fullfield = "%s.%s" % (base, field)
-        else:
-            fullfield = field
+        fullfield = f"{base}.{field}" if base else field
         if fullfield in cls.list_fields:
             return getattr(baseq, field).any(
                 cls._search_field_exists(nextfields, base=fullfield)
@@ -282,13 +261,13 @@ class TinyDB(DB):
             flt = self.flt_empty
         flt &= self._search_field_exists(field)
         return list(
-            set(
+            {
                 val
                 for rec in self._get(
                     flt, sort=sort, limit=limit, skip=skip, fields=[field]
                 )
                 for val in self._generate_field_values(rec, field)
-            )
+            }
         )
 
     def remove(self, rec):
@@ -355,12 +334,8 @@ class TinyDB(DB):
         q = Query()
         if isinstance(oid, list):
             res = q._id.one_of(oid)
-            if neg:
-                return ~res
-            return res
-        if neg:
-            return q._id != oid
-        return q._id == oid
+            return ~res if neg else res
+        return q._id != oid if neg else q._id == oid
 
     @staticmethod
     def searchversion(version):
@@ -378,16 +353,12 @@ class TinyDB(DB):
         """
         q = Query()
         addr = cls.ip2internal(addr)
-        if neg:
-            return q.addr != addr
-        return q.addr == addr
+        return q.addr != addr if neg else q.addr == addr
 
     @classmethod
     def searchhosts(cls, hosts, neg=False):
         res = Query().addr.one_of([cls.ip2internal(addr) for addr in hosts])
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchrange(cls, start, stop, neg=False):
@@ -395,9 +366,7 @@ class TinyDB(DB):
         stop = cls.ip2internal(stop)
         q = Query()
         res = (q.addr >= start) & (q.addr <= stop)
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @staticmethod
     def searchval(key, val):
@@ -564,9 +533,7 @@ class TinyDBActive(TinyDB, DBActive):
     def searchdomain(cls, name, neg=False):
         q = Query()
         res = q.hostnames.any(cls._searchstring_re_inarray(q.domains, name))
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchhostname(cls, name=None, neg=False):
@@ -575,9 +542,7 @@ class TinyDBActive(TinyDB, DBActive):
             res = q.hostnames.exists()
         else:
             res = q.hostnames.any(cls._searchstring_re(q.name, name))
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchmac(cls, mac=None, neg=False):
@@ -589,9 +554,7 @@ class TinyDBActive(TinyDB, DBActive):
                 mac = mac.lower()
             return cls._searchstring_re(q_mac, mac, neg=neg)
         res = q_mac.exists()
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchcategory(cls, cat, neg=False):
@@ -610,9 +573,7 @@ class TinyDBActive(TinyDB, DBActive):
         q = Query()
         if isinstance(src, list):
             res = q.source.one_of(src)
-            if neg:
-                return ~res
-            return res
+            return ~res if neg else res
         return cls._searchstring_re(q.source, src, neg=neg)
 
     @staticmethod
@@ -655,10 +616,7 @@ class TinyDBActive(TinyDB, DBActive):
             if neg:
                 raise ValueError("searchports: cannot set both neg and any_")
             return cls.flt_or(*res)
-        if neg:
-            # pylint: disable=invalid-unary-operand-type
-            return ~cls.flt_or(*res)
-        return cls.flt_and(*res)
+        return ~cls.flt_or(*res) if neg else cls.flt_and(*res)
 
     @classmethod
     def searchcountopenports(cls, minn=None, maxn=None, neg=False):
@@ -667,9 +625,7 @@ class TinyDBActive(TinyDB, DBActive):
         res = []
         q = Query()
         if minn == maxn:
-            if neg:
-                return q.openports.count != minn
-            return q.openports.count == minn
+            return q.openports.count != minn if neg else q.openports.count == minn
         if minn is not None:
             if neg:
                 res.append(q.openports.count < minn)
@@ -680,18 +636,14 @@ class TinyDBActive(TinyDB, DBActive):
                 res.append(q.openports.count > maxn)
             else:
                 res.append(q.openports.count <= maxn)
-        if neg:
-            return cls.flt_or(*res)
-        return cls.flt_and(*res)
+        return cls.flt_or(*res) if neg else cls.flt_and(*res)
 
     @staticmethod
     def searchopenport(neg=False):
         "Filters records with at least one open port."
         q = Query()
         res = q.ports.any(q.state_state == "open")
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchservice(cls, srv, port=None, protocol=None):
@@ -760,7 +712,7 @@ class TinyDBActive(TinyDB, DBActive):
             res.append(cls._searchstring_re(q.output, output))
         if values:
             if isinstance(name, list):
-                all_keys = set(ALIASES_TABLE_ELEMS.get(n, n) for n in name)
+                all_keys = {ALIASES_TABLE_ELEMS.get(n, n) for n in name}
                 if len(all_keys) != 1:
                     raise TypeError(
                         ".searchscript() needs similar `name` values when using a `values` arg"
@@ -774,18 +726,16 @@ class TinyDBActive(TinyDB, DBActive):
                 key = ALIASES_TABLE_ELEMS.get(name, name)
             if isinstance(values, dict):
                 for field, value in values.items():
-                    if "ports.scripts.%s" % key in cls.list_fields:
+                    if f"ports.scripts.{key}" in cls.list_fields:
                         base = q
-                        for subfld in field.split("."):
-                            base = getattr(base, subfld)
                         list_field = True
                     else:
                         base = getattr(q, key)
-                        for subfld in field.split("."):
-                            base = getattr(base, subfld)
                         list_field = False
+                    for subfld in field.split("."):
+                        base = getattr(base, subfld)
                     if isinstance(value, utils.REGEXP_T):
-                        if "ports.scripts.%s.%s" % (key, field) in cls.list_fields:
+                        if f"ports.scripts.{key}.{field}" in cls.list_fields:
                             # pylint reports "Cell variable value
                             # defined in loop" - see
                             # https://stackoverflow.com/a/25314665
@@ -796,7 +746,7 @@ class TinyDBActive(TinyDB, DBActive):
                             )
                         else:
                             base = base.search(value.pattern, flags=value.flags)
-                    elif "ports.scripts.%s.%s" % (key, field) in cls.list_fields:
+                    elif f"ports.scripts.{key}.{field}" in cls.list_fields:
                         base = base.any([value])
                     else:
                         base = base == value
@@ -804,7 +754,7 @@ class TinyDBActive(TinyDB, DBActive):
                         res.append(getattr(q, key).any(base))
                     else:
                         res.append(base)
-            elif "ports.scripts.%s" % key in cls.list_fields:
+            elif f"ports.scripts.{key}" in cls.list_fields:
                 res.append(cls._searchstring_re_inarray(getattr(q, key), values))
             else:
                 res.append(cls._searchstring_re(getattr(q, key), values))
@@ -812,10 +762,7 @@ class TinyDBActive(TinyDB, DBActive):
             res = q.ports.any(q.scripts.any(cls.flt_and(*res)))
         else:
             res = q.ports.any(q.scripts.exists())
-        if neg:
-            # pylint: disable=invalid-unary-operand-type
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchsvchostname(cls, hostname):
@@ -901,9 +848,7 @@ class TinyDBActive(TinyDB, DBActive):
                 )
             )
         )
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchhttptitle(cls, title):
@@ -1005,10 +950,7 @@ class TinyDBActive(TinyDB, DBActive):
             res.append(cls._searchstring_re(q.vulns.state, state))
         if vulnid is not None:
             res.append(cls._searchstring_re(q.vulns.id, vulnid))
-        if res:
-            res = cls.flt_and(*res)
-        else:
-            res = q.vulns.id.exists()
+        res = cls.flt_and(*res) if res else q.vulns.id.exists()
         return q.ports.any(q.scripts.any(res))
 
     @staticmethod
@@ -1017,9 +959,7 @@ class TinyDBActive(TinyDB, DBActive):
             delta = timedelta(seconds=delta)
         tstamp = (datetime.now() - delta).timestamp()
         q = Query().endtime
-        if neg:
-            return q < tstamp
-        return q >= tstamp
+        return q < tstamp if neg else q >= tstamp
 
     @staticmethod
     def searchtimerange(start, stop, neg=False):
@@ -1043,9 +983,7 @@ class TinyDBActive(TinyDB, DBActive):
         if ttl is not None:
             res.append(q.ttl == ttl)
         res = q.traces.any(q.hops.any(cls.flt_and(*res)))
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchhopdomain(cls, hop, neg=False):
@@ -1058,17 +996,13 @@ class TinyDBActive(TinyDB, DBActive):
                 )
             )
         )
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchhopname(cls, hop, neg=False):
         q = Query()
         res = q.traces.any(q.hops.any(cls._searchstring_re(q.host, hop)))
-        if neg:
-            return ~res
-        return res
+        return ~res if neg else res
 
     @classmethod
     def searchcpe(cls, cpe_type=None, vendor=None, product=None, version=None):
@@ -1089,9 +1023,7 @@ class TinyDBActive(TinyDB, DBActive):
             for field, value in fields
             if value is not None
         ]
-        if not flt:
-            return q.cpes.exists()
-        return q.cpes.any(cls.flt_and(*flt))
+        return q.cpes.exists() if not flt else q.cpes.any(cls.flt_and(*flt))
 
     @classmethod
     def searchhassh(cls, value_or_hash=None, server=None):
@@ -1105,10 +1037,7 @@ class TinyDBActive(TinyDB, DBActive):
             baseflt = baseflt & cls._searchstring_re(
                 getattr(getattr(q, "ssh2-enum-algos").hassh, key), value
             )
-        if server:
-            portflt = q.port != -1
-        else:
-            portflt = q.port == -1
+        portflt = q.port != -1 if server else q.port == -1
         return q.ports.any(portflt & q.scripts.any(baseflt))
 
     def topvalues(

@@ -53,10 +53,7 @@ class Target:
         self.rand = rand
         # len() result needs to be lower than sys.maxsize
         self.targetscount = targets.__len__()
-        if maxnbr is None:
-            self.maxnbr = self.targetscount
-        else:
-            self.maxnbr = maxnbr
+        self.maxnbr = self.targetscount if maxnbr is None else maxnbr
         self.state = state
         self.name = name or (
             "%d address%s from %d range%s"
@@ -67,10 +64,7 @@ class Target:
                 "s" if len(targets) > 1 else "",
             )
         )
-        if categories is None:
-            self.categories = [self.name]
-        else:
-            self.categories = categories
+        self.categories = [self.name] if categories is None else categories
         self.infos = {"categories": self.categories}
 
     def __len__(self):
@@ -80,7 +74,7 @@ class Target:
         return IterTarget(self, rand=self.rand, state=self.state)
 
     def __repr__(self):
-        return "<Target %s>" % self.name
+        return f"<Target {self.name}>"
 
     def union(self, *others):
         others = tuple(o for o in others if o)
@@ -178,7 +172,7 @@ class TargetRegisteredCountry(Target):
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name="REGISTERED_COUNTRY-%s" % country,
+            name=f"REGISTERED_COUNTRY-{country}",
             categories=categories,
         )
 
@@ -195,7 +189,7 @@ class TargetCountry(Target):
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name="COUNTRY-%s" % country,
+            name=f"COUNTRY-{country}",
             categories=categories,
         )
 
@@ -214,7 +208,7 @@ class TargetRegion(Target):
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name="REGION-%s-%s" % (country, region),
+            name=f"REGION-{country}-{region}",
             categories=categories,
         )
 
@@ -233,7 +227,7 @@ class TargetCity(Target):
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name="CITY-%s-%s" % (country_code, city),
+            name=f"CITY-{country_code}-{city}",
             categories=categories,
         )
 
@@ -293,11 +287,13 @@ class TargetRange(Target):
         name=None,
     ):
         super().__init__(
-            geoiputils.IPRanges(ranges=[(utils.ip2int(start), utils.ip2int(stop))]),
+            geoiputils.IPRanges(
+                ranges=[(utils.ip2int(start), utils.ip2int(stop))]
+            ),
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name=name or "RANGE-%s-%s" % (start, stop),
+            name=name or f"RANGE-{start}-{stop}",
             categories=categories,
         )
 
@@ -314,7 +310,7 @@ class TargetNetwork(TargetRange):
             rand=rand,
             maxnbr=maxnbr,
             state=state,
-            name="NET-%s" % net.replace("/", "-"),
+            name=f'NET-{net.replace("/", "-")}',
             categories=categories,
         )
 
@@ -339,7 +335,7 @@ class TargetFile(Target):
 
     def __init__(self, filename, categories=None, maxnbr=None, state=None):
         self.filename = filename
-        self.name = "FILE-%s" % filename
+        self.name = f"FILE-{filename}"
         if categories is None:
             categories = [self.name]
         self.infos = {"categories": categories}
@@ -347,10 +343,7 @@ class TargetFile(Target):
             self.targetscount = sum(
                 1 for line in fdesc if self._getaddr(line) is not None
             )
-        if maxnbr is None:
-            self.maxnbr = self.targetscount
-        else:
-            self.maxnbr = maxnbr
+        self.maxnbr = self.targetscount if maxnbr is None else maxnbr
         self.state = state
 
     def __iter__(self):
@@ -459,7 +452,7 @@ class TargetNmapPreScan(TargetZMapPreScan):
         ports = ",".join(str(p) for p in ports)
         if nmap_opts is None:
             nmap_opts = []
-        nmap_opts += ["-n", "-PS%s" % ports, "-sS", "--open", "-p", ports]
+        nmap_opts += ["-n", f"-PS{ports}", "-sS", "--open", "-p", ports]
         self.infos["nmap_pre_scan"] = nmap_opts[:]
         # TODO: use -iL and feed target randomly when needed, w/o
         # using a temporary file

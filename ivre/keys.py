@@ -117,10 +117,7 @@ class SSLKey:
 
     @classmethod
     def read_pem(cls, pem: AnyStr) -> bytes:
-        if isinstance(pem, str):
-            raw_cert = pem.encode()
-        else:
-            raw_cert = pem
+        raw_cert = pem.encode() if isinstance(pem, str) else pem
         raw_cert = utils.decode_b64(cls.pem_borders.sub(b"", raw_cert))
         with subprocess.Popen(
             [config.OPENSSL_CMD, "x509", "-noout", "-text", "-inform", "DER"],

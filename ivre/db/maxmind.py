@@ -250,7 +250,7 @@ class MaxMindFile:
         return val
 
     def __repr__(self):
-        return "<%s from %s>" % (self.__class__.__name__, self.path)
+        return f"<{self.__class__.__name__} from {self.path}>"
 
     def lookup(self, ip):
         node_no = 0
@@ -360,7 +360,7 @@ class MaxMindDBData(DBData):
                 name = subdb.metadata["database_type"].lower()
                 if name.startswith("geolite2-"):
                     name = name[9:]
-                setattr(self, "_db_%s" % name, subdb)
+                setattr(self, f"_db_{name}", subdb)
 
     def as_byip(self, addr):
         return {
@@ -371,64 +371,46 @@ class MaxMindDBData(DBData):
     def location_byip(self, addr):
         raw = self.db_city.lookup(addr)
         result = {}
-        sub = raw.get("subdivisions")
-        if sub:
+        if sub := raw.get("subdivisions"):
             result["region_code"] = tuple(v.get("iso_code") for v in sub)
             result["region_name"] = tuple(
                 v.get("names", {}).get(self.LANG) for v in sub
             )
-        sub = raw.get("continent")
-        if sub:
-            value = sub.get("code")
-            if value:
+        if sub := raw.get("continent"):
+            if value := sub.get("code"):
                 result["continent_code"] = value
-            value = sub.get("names", {}).get(self.LANG)
-            if value:
+            if value := sub.get("names", {}).get(self.LANG):
                 result["continent_name"] = value
-        sub = raw.get("country")
-        if sub:
-            value = sub.get("iso_code")
-            if value:
+        if sub := raw.get("country"):
+            if value := sub.get("iso_code"):
                 result["country_code"] = value
-            value = sub.get("names", {}).get(self.LANG)
-            if value:
+            if value := sub.get("names", {}).get(self.LANG):
                 result["country_name"] = value
-        sub = raw.get("registered_country")
-        if sub:
-            value = sub.get("iso_code")
-            if value:
+        if sub := raw.get("registered_country"):
+            if value := sub.get("iso_code"):
                 result["registered_country_code"] = value
-            value = sub.get("names", {}).get(self.LANG)
-            if value:
+            if value := sub.get("names", {}).get(self.LANG):
                 result["registered_country_name"] = value
-        value = raw.get("city", {}).get("names", {}).get(self.LANG)
-        if value:
+        if value := raw.get("city", {}).get("names", {}).get(self.LANG):
             result["city"] = value
-        value = raw.get("postal", {}).get("code")
-        if value:
+        if value := raw.get("postal", {}).get("code"):
             result["postal_code"] = value
-        sub = raw.get("location")
-        if sub:
+        if sub := raw.get("location"):
             try:
                 result["coordinates"] = (sub["latitude"], sub["longitude"])
             except KeyError:
                 pass
             value = sub.get("accuracy_radius")
             result["coordinates_accuracy_radius"] = value
-        if result:
-            return result
-        return None
+        return result if result else None
 
     def country_byip(self, addr):
         result = {}
         raw = self.db_country.lookup(addr)
-        sub = raw.get("country")
-        if sub:
-            value = sub.get("iso_code")
-            if value:
+        if sub := raw.get("country"):
+            if value := sub.get("iso_code"):
                 result["country_code"] = value
-            value = sub.get("names", {}).get(self.LANG)
-            if value:
+            if value := sub.get("names", {}).get(self.LANG):
                 result["country_name"] = value
         return result
 
@@ -460,17 +442,9 @@ class MaxMindDBData(DBData):
             fdesc.write("%d,%d,%s\n" % data)
 
     def dump_city_ranges(self, fdesc):
-        for data in self.db_city.get_ranges(
-            [
-                "country->iso_code",
-                "subdivisions->0->iso_code",
-                "city->names->%s" % config.GEOIP_LANG,
-                "city->geoname_id",
-            ],
-            cond=lambda line: (
-                line[2] is not None and (line[3] is not None or line[4] is not None)
-            ),
-        ):
+        for data in self.db_city.get_ranges(["country->iso_code", "subdivisions->0->iso_code", f"city->names->{config.GEOIP_LANG}", "city->geoname_id"], cond=lambda line: (
+                    line[2] is not None and (line[3] is not None or line[4] is not None)
+                )):
             if data[0] > 0xFFFFFFFF:  # only IPv4
                 break
             fdesc.write(
@@ -522,7 +496,7 @@ class MaxMindDBData(DBData):
             return
         if not subdb.path.endswith(".mmdb"):
             return
-        csv_file = subdb.path[:-4] + "dump-IPv4.csv"
+        csv_file = f"{subdb.path[:-4]}dump-IPv4.csv"
         if attr == "db_registered_country":
             if "Country" not in csv_file:
                 utils.LOGGER.error(

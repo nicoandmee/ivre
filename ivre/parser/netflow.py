@@ -122,9 +122,9 @@ class NetFlow(CmdParser):
         cli_idx = 1 if srv_idx == 2 else 2
         fields["src"] = fields.pop("addr%d" % cli_idx)
         fields["dst"] = fields.pop("addr%d" % srv_idx)
-        if "port%s" % cli_idx in fields:
+        if f"port{cli_idx}" in fields:
             fields["sport"] = fields.pop("port%d" % cli_idx)
-        if "port%s" % srv_idx in fields:
+        if f"port{srv_idx}" in fields:
             fields["dport"] = fields.pop("port%d" % srv_idx)
             fields["flow_name"] = "%(proto)s %(dport)s" % fields
         elif "type" in fields:

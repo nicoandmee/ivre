@@ -53,7 +53,7 @@ def _dns_do_query(
         cmd.extend(["-t", rtype])
     cmd.append(name)
     if srv:
-        cmd.append("@%s" % srv)
+        cmd.append(f"@{srv}")
     with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
         assert proc.stdout is not None
         for line_bytes in proc.stdout:
@@ -107,11 +107,11 @@ class Checker:
         try:
             return self._ns4
         except AttributeError:
-            self._ns4 = list(
+            self._ns4 = [
                 (srv, addr)
                 for srv in self.ns_servers
                 for addr in _dns_query(srv, rtype="A")
-            )
+            ]
             return self._ns4
 
     @property
@@ -119,11 +119,11 @@ class Checker:
         try:
             return self._ns6
         except AttributeError:
-            self._ns6 = list(
+            self._ns6 = [
                 (srv, addr)
                 for srv in self.ns_servers
                 for addr in _dns_query(srv, rtype="AAAA")
-            )
+            ]
             return self._ns6
 
     def _test(self, addr: str) -> List[nsrecord]:
@@ -264,7 +264,7 @@ class SameValueChecker(Checker):
         for srvname, addr, res in self.results:
             srvname = srvname.rstrip(".")
             results.setdefault(res, {}).setdefault(addr, []).append(srvname)
-        if len(results) < 1:
+        if not results:
             return
         self.stop = datetime.now()
         good_value = max(results, key=lambda val: len(results[val]))
@@ -351,15 +351,14 @@ class DNSSRVChecker(SameValueChecker):
                         "scripts": [
                             {
                                 "id": "dns-domains",
-                                "output": "Server is authoritative for %s"
-                                % self.domain,
+                                "output": f"Server is authoritative for {self.domain}",
                                 "dns-domains": [
                                     {
                                         "domain": self.domain,
                                         "parents": list(get_domains(self.domain)),
                                     }
                                 ],
-                            },
+                            }
                         ],
                     }
                 ],
@@ -371,7 +370,7 @@ class TLSRPTChecker(SameValueChecker):
 
     def __init__(self, domain: str) -> None:
         super().__init__(domain)
-        self.name = "_smtp._tls.%s" % domain
+        self.name = f"_smtp._tls.{domain}"
 
     def test(self, v4: bool = True, v6: bool = True) -> Generator[NmapHost, None, None]:
         yield from super().test(v4=v4, v6=v6)
@@ -379,15 +378,13 @@ class TLSRPTChecker(SameValueChecker):
             srvname = srvname.rstrip(".")
             res = [literal_eval(r) for r in sorted(raw_res)]
             if not res:
-                output = "Domain %s has no TLS-RPT configuration" % self.domain
+                output = f"Domain {self.domain} has no TLS-RPT configuration"
                 structured = {
                     "domain": self.domain,
                     "warnings": ["Domain has no TLS-RPT configuration"],
                 }
             elif len(res) > 1:
-                output = (
-                    "Domain %s has more than one TLS-RPT configuration" % self.domain
-                )
+                output = f"Domain {self.domain} has more than one TLS-RPT configuration"
                 structured = {
                     "domain": self.domain,
                     "value": " / ".join(res),
@@ -441,7 +438,7 @@ class TLSRPTChecker(SameValueChecker):
                         % (self.domain, "\n".join(warnings))
                     )
                 else:
-                    output = "Domain %s has a valid TLS-RPT configuration" % self.domain
+                    output = f"Domain {self.domain} has a valid TLS-RPT configuration"
             yield {
                 "addr": addr,
                 "hostnames": [

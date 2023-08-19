@@ -26,6 +26,7 @@ by ~/.ivre.conf, /usr/local/etc/ivre/ivre.conf,
 
 """
 
+
 # The comment lines "Begin XXX" and "End XXX" are used to include
 # parts of this files in the documentation.
 
@@ -174,12 +175,7 @@ MASSCAN_PROBES = {
 
 # Begin DNSBL
 # Domains used for DNS blacklists (RFC 5782)
-DNS_BLACKLIST_DOMAINS = set(
-    [
-        "blacklist.woody.ch",
-        "zen.spamhaus.org",
-    ]
-)
+DNS_BLACKLIST_DOMAINS = {"blacklist.woody.ch", "zen.spamhaus.org"}
 # End DNSBL
 
 # Begin flows
@@ -343,14 +339,18 @@ def guess_prefix(directory: Optional[str] = None) -> Optional[str]:
 
 
 def guess_share(soft: str) -> Optional[str]:
-    for path in [
-        "/usr/local/share/%s" % soft,
-        "/opt/%s/share/%s" % (soft, soft),
-        "/usr/share/%s" % soft,
-    ]:
-        if os.path.isdir(path):
-            return path
-    return None
+    return next(
+        (
+            path
+            for path in [
+                f"/usr/local/share/{soft}",
+                f"/opt/{soft}/share/{soft}",
+                f"/usr/share/{soft}",
+            ]
+            if os.path.isdir(path)
+        ),
+        None,
+    )
 
 
 if GEOIP_PATH is None:
@@ -358,7 +358,7 @@ if GEOIP_PATH is None:
 
 
 if DB_DATA is None and GEOIP_PATH is not None:
-    DB_DATA = "maxmind:///%s" % GEOIP_PATH
+    DB_DATA = f"maxmind:///{GEOIP_PATH}"
 
 
 if DATA_PATH is None:

@@ -244,9 +244,7 @@ class DB:
         if args.ips:
 
             def _updtflt_(oflt, nflt):
-                if not oflt:
-                    return nflt
-                return self.flt_or(oflt, nflt)
+                return nflt if not oflt else self.flt_or(oflt, nflt)
 
             loc_flt = None
             for a in args.ips:
@@ -285,7 +283,7 @@ class DB:
             )
             return None
         try:
-            module = import_module("ivre.db.%s" % modulename)
+            module = import_module(f"ivre.db.{modulename}")
         except ImportError:
             utils.LOGGER.error(
                 "Cannot import ivre.db.%s for %s",
@@ -312,9 +310,7 @@ class DB:
         conditions is true.
 
         """
-        if args:
-            return reduce(cls._flt_and, args)
-        return cls.flt_empty
+        return reduce(cls._flt_and, args) if args else cls.flt_empty
 
     @staticmethod
     def _flt_and(cond1, cond2):
@@ -333,9 +329,7 @@ class DB:
         conditions is true.
 
         """
-        if args:
-            return reduce(cls._flt_or, args)
-        return cls.flt_empty
+        return reduce(cls._flt_or, args) if args else cls.flt_empty
 
     @staticmethod
     def _flt_or(cond1, cond2):
@@ -397,14 +391,10 @@ class DB:
             result = []
         if use_single_int:
             if use_ipv6:
-                return result + [
-                    utils.ip2int(addr if ":" in addr else ("::ffff:%s" % addr))
-                ]
+                return (result + [utils.ip2int(addr if ":" in addr else f"::ffff:{addr}")])
             return result + [utils.ip2int(addr)]
         addrbin = utils.ip2bin(addr)
-        if use_ipv6:
-            return result + list(addrbin)
-        return result + list(addrbin)[-4:]
+        return result + list(addrbin) if use_ipv6 else result + list(addrbin)[-4:]
 
     def features_port_list(self, flt, yieldall, use_service, use_product, use_version):
         """Returns a list of ports features (for ML algorithms) as tuples of
@@ -424,12 +414,12 @@ class DB:
 
         """
         if not yieldall:
-            return list(
+            return [
                 tuple(val)
                 for val in self._features_port_list(
                     flt, yieldall, use_service, use_product, use_version
                 )
-            )
+            ]
 
         def _gen(val):
             val = list(val)
@@ -439,13 +429,13 @@ class DB:
                 yield tuple(val)
 
         return sorted(
-            set(
+            {
                 val
                 for vals in self._features_port_list(
                     flt, yieldall, use_service, use_product, use_version
                 )
                 for val in _gen(vals)
-            ),
+            },
             key=lambda val: [utils.key_sort_none(v) for v in val],
         )
 
@@ -1020,9 +1010,7 @@ class DBActive(DB):
         url = port.get("screenshot")
         if url is None:
             return None
-        if url == "field":
-            return port.get("screendata")
-        return None
+        return port.get("screendata") if url == "field" else None
 
     def migrate_schema(self, version):
         """Implemented in backend-specific classes."""
@@ -1082,7 +1070,7 @@ class DBActive(DB):
         """
         assert doc["schema_version"] == 2
         doc["schema_version"] = 3
-        migrate_scripts = set(["afp-ls", "nfs-ls", "smb-ls", "ftp-anon", "http-ls"])
+        migrate_scripts = {"afp-ls", "nfs-ls", "smb-ls", "ftp-anon", "http-ls"}
         for port in doc.get("ports", []):
             for script in port.get("scripts", []):
                 if script["id"] in migrate_scripts:
@@ -1140,9 +1128,11 @@ class DBActive(DB):
         """
         assert doc["schema_version"] == 5
         doc["schema_version"] = 6
-        migrate_scripts = set(
-            script for script, alias in ALIASES_TABLE_ELEMS.items() if alias == "vulns"
-        )
+        migrate_scripts = {
+            script
+            for script, alias in ALIASES_TABLE_ELEMS.items()
+            if alias == "vulns"
+        }
         for port in doc.get("ports", []):
             for script in port.get("scripts", []):
                 if script["id"] in migrate_scripts:
@@ -1379,10 +1369,7 @@ class DBActive(DB):
                     if "http-server-header" in script:
                         data = script["http-server-header"]
                         if isinstance(data, dict):
-                            if "Server" in data:
-                                script["http-server-header"] = [data["Server"]]
-                            else:
-                                script["http-server-header"] = []
+                            script["http-server-header"] = [data["Server"]] if "Server" in data else []
                     else:
                         script["http-server-header"] = [
                             line.split(":", 1)[1].lstrip()
@@ -1688,7 +1675,7 @@ class DBActive(DB):
         if key is not None:
             params.setdefault("values", {})["key"] = key
         if keytype is not None:
-            params.setdefault("values", {})["type"] = "ssh-%s" % keytype
+            params.setdefault("values", {})["type"] = f"ssh-{keytype}"
         if bits is not None:
             params.setdefault("values", {})["bits"] = bits
         if output is not None:
@@ -1720,7 +1707,7 @@ class DBActive(DB):
         return self.searchscript(
             name="http-headers",
             output=re.compile(
-                "^ *Set-Cookie: %s=" % re.escape(name), flags=re.MULTILINE | re.I
+                f"^ *Set-Cookie: {re.escape(name)}=", flags=re.MULTILINE | re.I
             ),
         )
 
@@ -2486,10 +2473,11 @@ class DBNmap(DBActive):
                     if not host["cpes"]:
                         del host["cpes"]
                 host = self.json2dbrec(host)
-                if (needports and "ports" not in host) or (
-                    needopenports
-                    and not any(
-                        port.get("state_state") == "open"
+                if (
+                    (needports and "ports" not in host)
+                    or needopenports
+                    and all(
+                        port.get("state_state") != "open"
                         for port in host.get("ports", [])
                     )
                 ):
@@ -2661,10 +2649,11 @@ class DBNmap(DBActive):
         """
         if categories is None:
             categories = []
-        answers = set()
-        for probe in masscan_probes or []:
-            if probe.startswith("ZDNS:"):
-                answers.add(probe[5:])
+        answers = {
+            probe[5:]
+            for probe in masscan_probes or []
+            if probe.startswith("ZDNS:")
+        }
         if not answers:
             utils.LOGGER.warning(
                 "No ZDNS probe has been defined. Please use "
@@ -2733,10 +2722,9 @@ class DBNmap(DBActive):
                         for ans in data["answers"]
                         if all(fld in ans for fld in ["answer", "name", "type"])
                     ]
-                    if (
-                        set("%(name)s:%(type)s:%(answer)s" % ans for ans in cur_answers)
-                        != answers
-                    ):
+                    if {
+                        "%(name)s:%(type)s:%(answer)s" % ans for ans in cur_answers
+                    } != answers:
                         script["output"] += "\nAnswer may be incorrect!\n%s" % (
                             "\n".join(
                                 "%(name)s    %(type)s    %(answer)s" % ans
@@ -2947,13 +2935,13 @@ class DBNmap(DBActive):
                     rec["template"] = rec.pop("template-id")
                 name = rec["name"]
                 if "matcher_name" in rec:
-                    name += " (%s)" % rec["matcher_name"]
+                    name += f' ({rec["matcher_name"]})'
                 elif "matcher-name" in rec:
-                    name += " (%s)" % rec["matcher-name"]
+                    name += f' ({rec["matcher-name"]})'
                 scripts = [
                     {
-                        "id": "%s-nuclei" % (rec["type"]),
-                        "output": "[%s] %s found at %s" % (rec["severity"], name, url),
+                        "id": f'{rec["type"]}-nuclei',
+                        "output": f'[{rec["severity"]}] {name} found at {url}',
                         "nuclei": [
                             {
                                 "template": rec["template"],
@@ -2962,7 +2950,7 @@ class DBNmap(DBActive):
                                 "severity": rec["severity"],
                             },
                         ],
-                    },
+                    }
                 ]
                 port_doc = {
                     "protocol": "tcp",
@@ -3009,26 +2997,12 @@ class DBNmap(DBActive):
                         )
                         if len(version_list) > 1:
                             version_list = [
-                                "%s (%s)"
-                                % (
-                                    vers,
-                                    EXCHANGE_BUILDS.get(vers, "unknown build number"),
-                                )
+                                f'{vers} ({EXCHANGE_BUILDS.get(vers, "unknown build number")})'
                                 for vers in version_list
                             ]
-                            output = (
-                                "OWA: path %s, version %s (multiple versions found!)"
-                                % (
-                                    path,
-                                    " / ".join(version_list),
-                                )
-                            )
+                            output = f'OWA: path {path}, version {" / ".join(version_list)} (multiple versions found!)'
                         else:
-                            output = "OWA: path %s, version %s (%s)" % (
-                                path,
-                                version_list[0],
-                                parsed_version,
-                            )
+                            output = f"OWA: path {path}, version {version_list[0]} ({parsed_version})"
                         structured["version"] = version_list[0]
                         structured["parsed_version"] = parsed_version
                     else:
@@ -3393,10 +3367,9 @@ class DBNmap(DBActive):
                 # TODO: find Nmap equivalent probe based on rec["_shodan"]["module"]
                 if rec.get("opts", {}).get("raw"):
                     raw_output = utils.decode_hex(rec["opts"]["raw"])
-                    nmap_info = utils.match_nmap_svc_fp(
+                    if nmap_info := utils.match_nmap_svc_fp(
                         output=raw_output, proto=port["protocol"]
-                    )
-                    if nmap_info:
+                    ):
                         try:
                             del nmap_info["soft"]
                         except KeyError:
@@ -3411,7 +3384,7 @@ class DBNmap(DBActive):
                             cpe["origins"] = sorted(cpe["origins"])
                         if not host["cpes"]:
                             del host["cpes"]
-                        port.update(nmap_info)
+                        port |= nmap_info
                         xmlnmap.add_service_hostname(
                             nmap_info,
                             host.setdefault("hostnames", []),
@@ -3527,12 +3500,11 @@ class DBNmap(DBActive):
                     probe = "GetRequest"
                 else:
                     probe = "NULL"
-                nmap_info = utils.match_nmap_svc_fp(
+                if nmap_info := utils.match_nmap_svc_fp(
                     output=raw_output,
                     proto=port["protocol"],
                     probe=probe,
-                )
-                if nmap_info:
+                ):
                     try:
                         del nmap_info["soft"]
                     except KeyError:
@@ -3547,7 +3519,7 @@ class DBNmap(DBActive):
                         cpe["origins"] = sorted(cpe["origins"])
                     if not host["cpes"]:
                         del host["cpes"]
-                    port.update(nmap_info)
+                    port |= nmap_info
                     xmlnmap.add_service_hostname(
                         nmap_info,
                         host.setdefault("hostnames", []),
@@ -3558,9 +3530,7 @@ class DBNmap(DBActive):
                     except ValueError:
                         hdrs = raw_output
                         body = None
-                    # TODO http-headers / http-content
-                    hdrs_split = http_hdr_split.split(hdrs)
-                    if hdrs_split:
+                    if hdrs_split := http_hdr_split.split(hdrs):
                         hdr_output_list = [
                             utils.nmap_encode_data(line) for line in hdrs_split
                         ]
@@ -3781,7 +3751,7 @@ class DBView(DBActive):
         if not client_value_or_hash:
             return cls._searchja3(value_or_hash, script_id, neg=neg)
         key_client, value_client = cls._ja3keyvalue(client_value_or_hash)
-        values = {"client.%s" % (key_client): value_client}
+        values = {f"client.{key_client}": value_client}
         if value_or_hash:
             key_srv, value_srv = cls._ja3keyvalue(value_or_hash)
             values[key_srv] = value_srv
@@ -4001,13 +3971,8 @@ class DBPassive(DB):
     ):
         if self.output_function is None:
             return
-        timestamps = []
-        for fld in ["firstseen", "lastseen"]:
-            if fld in spec:
-                timestamps.append(spec[fld])
-        for val in timestamp, lastseen:
-            if val is not None:
-                timestamps.append(val)
+        timestamps = [spec[fld] for fld in ["firstseen", "lastseen"] if fld in spec]
+        timestamps.extend(val for val in (timestamp, lastseen) if val is not None)
         spec["firstseen"] = min(timestamps)
         spec["lastseen"] = max(timestamps)
         if getinfos is not None:

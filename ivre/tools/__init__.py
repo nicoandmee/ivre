@@ -71,13 +71,13 @@ def get_command(name: str) -> Optional[Callable[[], None]]:
     if name in __all__:
         return cast(
             Callable[[], None],
-            getattr(__import__("%s.%s" % (__name__, name)).tools, name).main,
+            getattr(__import__(f"{__name__}.{name}").tools, name).main,
         )
     if name in ALIASES:
         name = ALIASES[name]
         return cast(
             Callable[[], None],
-            getattr(__import__("%s.%s" % (__name__, name)).tools, name).main,
+            getattr(__import__(f"{__name__}.{name}").tools, name).main,
         )
     return None
 
@@ -85,9 +85,8 @@ def get_command(name: str) -> Optional[Callable[[], None]]:
 def guess_command(name: str) -> List[str]:
     if name in __all__:
         return [name]
-    possible = sorted(set(cmd for cmd in __all__ if cmd.startswith(name)))
-    if possible:
+    if possible := sorted({cmd for cmd in __all__ if cmd.startswith(name)}):
         return possible
     if name in ALIASES:
         return [name]
-    return sorted(set(cmd for cmd in ALIASES if cmd.startswith(name)))
+    return sorted({cmd for cmd in ALIASES if cmd.startswith(name)})

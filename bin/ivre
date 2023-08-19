@@ -61,10 +61,10 @@ def main():
         command = "help"
     else:
         command = tools.ALIASES.get(sys.argv[1], sys.argv[1])
-        sys.argv = ["%s %s" % (executable, sys.argv[1])] + sys.argv[2:]
+        sys.argv = [f"{executable} {sys.argv[1]}"] + sys.argv[2:]
     if command.lower() in HELP_COMMANDS and len(sys.argv) > 1:
         command = sys.argv[1]
-        sys.argv = ["%s %s" % (executable, sys.argv[1]), "--help"] + sys.argv[2:]
+        sys.argv = [f"{executable} {sys.argv[1]}", "--help"] + sys.argv[2:]
     possible_commands = tools.guess_command(command)
     if len(possible_commands) == 1:
         tools.get_command(next(iter(possible_commands)))()

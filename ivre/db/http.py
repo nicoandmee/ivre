@@ -60,11 +60,7 @@ def serialize(obj):
         return {
             "f": "regexp",
             "a": [
-                "/%s/%s"
-                % (
-                    obj.pattern,
-                    "".join(x.lower() for x in "ILMSXU" if getattr(re, x) & obj.flags),
-                ),
+                f'/{obj.pattern}/{"".join(x.lower() for x in "ILMSXU" if getattr(re, x) & obj.flags)}'
             ],
         }
     if isinstance(obj, datetime):
@@ -121,7 +117,7 @@ if HAS_CURL:
             self.bytesio = bytesio
 
         def __iter__(self):
-            return (line for line in self.bytesio.getvalue().splitlines())
+            return iter(self.bytesio.getvalue().splitlines())
 
         def read(self, *args):
             return self.bytesio.getvalue()
@@ -171,8 +167,7 @@ if HAS_CURL:
             curl.setopt(pycurl.SSLCERTTYPE, "eng")
             curl.setopt(
                 pycurl.SSLCERT,
-                "pkcs11:manufacturer=piv_II;token=%s;pin-value=%s"
-                % (self.username, self.pincode),
+                f"pkcs11:manufacturer=piv_II;token={self.username};pin-value={self.pincode}",
             )
 
         @property
@@ -207,16 +202,11 @@ class HttpDB(DB):
         )
 
     def _get(self, spec, limit=None, skip=None, sort=None, fields=None):
-        url_l = [
-            "%s/%s?f=%s&q="
-            % (
-                self.db.baseurl,
-                self.route,
-                self._output_filter(spec),
-            )
-        ]
-        for s_field, direction in sort or []:
-            url_l.append("%ssortby:%s%%20" % ("-" if direction < 0 else "", s_field))
+        url_l = [f"{self.db.baseurl}/{self.route}?f={self._output_filter(spec)}&q="]
+        url_l.extend(
+            "%ssortby:%s%%20" % ("-" if direction < 0 else "", s_field)
+            for s_field, direction in sort or []
+        )
         if fields is not None:
             url_l.append("fields:%s%%20" % quote(",".join(fields)))
         url_l.append("skip:")
@@ -234,8 +224,7 @@ class HttpDB(DB):
             if not data:
                 break
             if limit is None:
-                for rec in data:
-                    yield rec
+                yield from data
             else:
                 for rec in data:
                     yield rec
@@ -293,8 +282,10 @@ class HttpDB(DB):
                 limit or 0,
             )
         ]
-        for s_field, direction in sort or []:
-            url_l.append("%%20%ssortby:%s" % ("-" if direction < 0 else "", s_field))
+        url_l.extend(
+            "%%20%ssortby:%s" % ("-" if direction < 0 else "", s_field)
+            for s_field, direction in sort or []
+        )
         if skip is not None:
             url_l.append("%%20skip:%d" % skip)
         url = "".join(url_l)
@@ -302,11 +293,7 @@ class HttpDB(DB):
             yield json.loads(line)
 
     def count(self, spec, **kargs):
-        url = "%s/%s/count?f=%s" % (
-            self.db.baseurl,
-            self.route,
-            self._output_filter(spec),
-        )
+        url = f"{self.db.baseurl}/{self.route}/count?f={self._output_filter(spec)}"
         req = self.db.open(url)
         return int(req.read().rstrip(b"\n"))
 
@@ -330,9 +317,7 @@ class HttpDB(DB):
         )
         for param in ["sort", "limit", "skip"]:
             if locals()[param] is not None:
-                raise ValueError(
-                    "Parameter %s is not supported in HTTP backend" % param
-                )
+                raise ValueError(f"Parameter {param} is not supported in HTTP backend")
 
         def output(x):
             return {"_id": outputproc(x["label"]), "count": x["value"]}
@@ -379,7 +364,7 @@ class HttpDB(DB):
 
     @staticmethod
     def flt_and(*args):
-        return {"f": "and", "a": list(a for a in args if a)}
+        return {"f": "and", "a": [a for a in args if a]}
 
     @classmethod
     def flt_or(cls, *args):
@@ -394,26 +379,26 @@ class HttpDB(DB):
         }
 
     def __getattribute__(self, attr):
-        if attr.startswith("search") and attr[6:]:
-            try:
-                return getattr(self, f"_{attr}")
-            except AttributeError:
-                pass
+        if not attr.startswith("search") or not attr[6:]:
+            return super().__getattribute__(attr)
+        try:
+            return getattr(self, f"_{attr}")
+        except AttributeError:
+            pass
 
-            # avoid using partial here because it returns an object
-            # and it breaks the help() output
-            def function(*args, **kargs):
-                return self._search(attr[6:], *args, **kargs)
+        # avoid using partial here because it returns an object
+        # and it breaks the help() output
+        def function(*args, **kargs):
+            return self._search(attr[6:], *args, **kargs)
 
-            try:
-                reference = getattr(self.reference, attr)
-            except AttributeError:
-                pass
-            else:
-                update_wrapper(function, reference)
-            setattr(self, f"_{attr}", function)
-            return function
-        return super().__getattribute__(attr)
+        try:
+            reference = getattr(self.reference, attr)
+        except AttributeError:
+            pass
+        else:
+            update_wrapper(function, reference)
+        setattr(self, f"_{attr}", function)
+        return function
 
 
 class HttpDBActive(HttpDB, DBActive):
@@ -456,7 +441,7 @@ class HttpDBData(HttpDB, DBData):
     route = "ipdata"
 
     def infos_byip(self, addr):
-        url = "%s/%s/%s" % (self.db.baseurl, self.route, addr)
+        url = f"{self.db.baseurl}/{self.route}/{addr}"
         req = self.db.open(url)
         return {
             k: tuple(v) if isinstance(v, list) else v

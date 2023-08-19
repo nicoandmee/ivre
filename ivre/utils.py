@@ -206,10 +206,7 @@ logging.basicConfig()
 
 def is_valid_ip(ipstr: AnyStr) -> bool:
     """Return True iff `ipstr` is a valid IP address."""
-    if isinstance(ipstr, bytes):
-        data = ipstr.decode()
-    else:
-        data = ipstr
+    data = ipstr.decode() if isinstance(ipstr, bytes) else ipstr
     try:
         socket.inet_aton(data)
     except socket.error:
@@ -230,10 +227,7 @@ def ip2int(ipstr: AnyStr) -> int:
     integer.
 
     """
-    if isinstance(ipstr, bytes):
-        data = ipstr.decode()
-    else:
-        data = ipstr
+    data = ipstr.decode() if isinstance(ipstr, bytes) else ipstr
     try:
         return cast(int, struct.unpack("!I", socket.inet_aton(data))[0])
     except socket.error:
@@ -248,9 +242,7 @@ def ip2int(ipstr: AnyStr) -> int:
 
 def force_ip2int(ipstr: Union[AnyStr, int]) -> int:
     """Same as ip2int(), but works when ipstr is already an int"""
-    if isinstance(ipstr, (str, bytes)):
-        return ip2int(ipstr)
-    return ipstr
+    return ip2int(ipstr) if isinstance(ipstr, (str, bytes)) else ipstr
 
 
 def int2ip(ipint: int) -> str:
@@ -282,9 +274,7 @@ def int2ip6(ipint: int) -> str:
 
 def force_int2ip(ipint: Union[int, str]) -> str:
     """Same as int2ip(), but works when ipint is already a atring"""
-    if isinstance(ipint, int):
-        return int2ip(ipint)
-    return ipint
+    return int2ip(ipint) if isinstance(ipint, int) else ipint
 
 
 def ip2bin(ipval: Union[AnyStr, int]) -> bytes:
@@ -426,9 +416,7 @@ def str2regexpnone(value: str) -> Union[str, Pattern[str], bool]:
     False.
 
     """
-    if value == "-":
-        return False
-    return str2regexp(value)
+    return False if value == "-" else str2regexp(value)
 
 
 def regexp2pattern(
@@ -445,13 +433,7 @@ def regexp2pattern(
         flags = string.flags
         data = string.pattern
         patterns = ("^", "$", ".*") if isinstance(data, str) else (b"^", b"$", b".*")
-        if data.startswith(patterns[0]):
-            data = data[1:]
-        # elif data.startswith('('):
-        #     raise ValueError("Regexp starting with a group are not "
-        #                      "(yet) supported")
-        else:
-            data = patterns[2] + data
+        data = data[1:] if data.startswith(patterns[0]) else patterns[2] + data
         if data.endswith(patterns[1]):
             data = data[:-1]
         # elif data.endswith(')'):
@@ -558,7 +540,7 @@ def all2datetime(arg: Union[int, float, str, datetime.datetime]) -> datetime.dat
         raise ValueError("time data %r does not match standard formats" % arg)
     if isinstance(arg, (int, float)):
         return datetime.datetime.fromtimestamp(arg)
-    raise TypeError("%s is of unknown type." % repr(arg))
+    raise TypeError(f"{repr(arg)} is of unknown type.")
 
 
 def makedirs(dirname: AnyStr) -> None:
@@ -598,9 +580,7 @@ def diff(doc1: Dict[str, Any], doc2: Dict[str, Any]) -> Dict[str, Any]:
     """
     keys1 = set(doc1)
     keys2 = set(doc2)
-    res: Dict[str, Any] = {}
-    for key in keys1.symmetric_difference(keys2):
-        res[key] = True
+    res: Dict[str, Any] = {key: True for key in keys1.symmetric_difference(keys2)}
     for key in keys1.intersection(keys2):
         if isfinal(doc1[key]) or isfinal(doc2[key]):
             if doc1[key] != doc2[key]:
@@ -624,12 +604,10 @@ def diff(doc1: Dict[str, Any], doc2: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if key in ["ports"]:
             res[key] = {}
-            kkeys1 = set(t["port"] for t in doc1["ports"])
-            kkeys2 = set(t["port"] for t in doc2["ports"])
+            kkeys1 = {t["port"] for t in doc1["ports"]}
+            kkeys2 = {t["port"] for t in doc2["ports"]}
             for kkey in kkeys1.symmetric_difference(kkeys2):
                 res[key][kkey] = True
-            for kkey in kkeys1.intersection(kkeys2):
-                pass
     return res
 
 
@@ -819,10 +797,7 @@ def serialize(obj: Any) -> str:
     """Return a JSON-compatible representation for `obj`"""
     regexp_types = (REGEXP_T, BsonRegex) if USE_BSON else REGEXP_T
     if isinstance(obj, regexp_types):  # type: ignore
-        return "/%s/%s" % (
-            obj.pattern,
-            "".join(x.lower() for x in "ILMSXU" if getattr(re, x) & obj.flags),
-        )
+        return f'/{obj.pattern}/{"".join(x.lower() for x in "ILMSXU" if getattr(re, x) & obj.flags)}'
     if isinstance(obj, datetime.datetime):
         return str(obj)
     if isinstance(obj, bytes):
@@ -846,9 +821,7 @@ class LogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Decides whether we should log a record"""
         if record.levelno < logging.INFO:
-            if record.msg.startswith("DB:"):
-                return config.DEBUG_DB
-            return config.DEBUG
+            return config.DEBUG_DB if record.msg.startswith("DB:") else config.DEBUG
         if record.levelno != logging.WARNING:
             return True
         if record.msg in self.warnings:
@@ -1081,9 +1054,11 @@ if USE_PIL:
             if not bbox:
                 # Image no longer exists after trim
                 return None
-            if result is None:
-                result = bbox
-            elif _img_size(bbox) < _img_size(result):
+            if (
+                result is None
+                or result is not None
+                and _img_size(bbox) < _img_size(result)
+            ):
                 result = bbox
         return result
 
@@ -1096,8 +1071,7 @@ if USE_PIL:
 
         """
         img = PIL.Image.open(BytesIO(imgdata))
-        bbox = _trim_image(img, tolerance)
-        if bbox:
+        if bbox := _trim_image(img, tolerance):
             newbbox = (
                 max(bbox[0] - minborder, 0),
                 max(bbox[1] - minborder, 0),
@@ -1182,9 +1156,7 @@ def guess_srv_port(port1: int, port2: int, proto: str = "tcp") -> int:
     ports = _PORTS.get(proto, {})
     val1, val2 = ports.get(port1, 0), ports.get(port2, 0)
     cmpval = (val1 > val2) - (val1 < val2)
-    if cmpval == 0:
-        return (port2 > port1) - (port2 < port1)
-    return cmpval
+    return (port2 > port1) - (port2 < port1) if cmpval == 0 else cmpval
 
 
 _NMAP_PROBES: Dict[
@@ -1218,10 +1190,10 @@ def _read_nmap_probes() -> None:
             _NMAP_CUR_FALLBACK = []
             probe: Optional[bytes]
             proto, name, probe = line[6:].split(b" ", 2)
-            if not (len(probe) >= 3 and probe[:2] == b"q|"):
+            if len(probe) < 3 or probe[:2] != b"q|":
                 LOGGER.warning("Invalid nmap probe %r", probe)
                 return
-            while not probe[-1:] == b"|":
+            while probe[-1:] != b"|":
                 try:
                     probe = probe.rsplit(b" ", 1)[-2]
                 except IndexError:
@@ -1248,9 +1220,9 @@ def _read_nmap_probes() -> None:
                 key = "cpe"
                 data = data[4:]
             else:
-                key = data[0:1].decode()
+                key = data[:1].decode()
                 data = data[1:]
-            sep = data[0:1]
+            sep = data[:1]
             data = data[1:]
             index = data.index(sep)
             value = data[:index]
@@ -1258,10 +1230,7 @@ def _read_nmap_probes() -> None:
             data = data[index + 1 :]
             flag = b""
             if data:
-                if b" " in data:
-                    flag, data = data.split(b" ", 1)
-                else:
-                    flag, data = data, b""
+                flag, data = data.split(b" ", 1) if b" " in data else (data, b"")
             if key == "m":
                 if value.endswith(b"\\r\\n"):
                     value = value[:-4] + b"(?:\\r\\n|$)"
@@ -1336,13 +1305,6 @@ def match_nmap_svc_fp(
             match = fingerprint["m"][0].search(output)
             if match is not None:
                 if probe == "NULL" and service == "landesk-rc":
-                    # This Nmap fingerprint sucks: it is just a size
-                    # check with a simple rule to exclude values
-                    # starting with HTTP, RTSP or SIP. This gives too
-                    # many false positive matches. According to a
-                    # comment, the values are supposed to be
-                    # random. Let's at least make sure it contains
-                    # enough different chars.
                     if len(set(output)) < 100:
                         continue
                 doc = softmatch if fingerprint["soft"] else result
@@ -1354,20 +1316,19 @@ def match_nmap_svc_fp(
                 for elt, key in NMAP_FINGERPRINT_IVRE_KEY.items():
                     if elt in fingerprint:
                         if elt == "cpe":
-                            data_cpe = [
-                                "cpe:/%s" % nmap_svc_fp_format_data(value, match)
+                            if data_cpe := [
+                                f"cpe:/{nmap_svc_fp_format_data(value, match)}"
                                 for value in fingerprint[elt]
-                            ]
-                            if data_cpe:
+                            ]:
                                 assert key == "cpe"
                                 doc["cpe"] = data_cpe
-                        else:
-                            data = nmap_svc_fp_format_data(fingerprint[elt][0], match)
-                            if data:
-                                # key is in
-                                # NMAP_FINGERPRINT_IVRE_KEY.values()
-                                # and is not "cpe"
-                                doc[key] = data  # type: ignore
+                        elif data := nmap_svc_fp_format_data(
+                            fingerprint[elt][0], match
+                        ):
+                            # key is in
+                            # NMAP_FINGERPRINT_IVRE_KEY.values()
+                            # and is not "cpe"
+                            doc[key] = data  # type: ignore
                 if not fingerprint["soft"]:
                     return result
         if fallbacks:
@@ -1380,7 +1341,7 @@ def match_nmap_svc_fp(
                 # exceptions so far are DNSStatusRequestTCP (fallback
                 # DNSStatusRequest) and DNSVersionBindReqTCP (fallback
                 # DNSVersionBindReq)
-                if proto == "tcp" and fallback + "TCP" == probe:
+                if proto == "tcp" and f"{fallback}TCP" == probe:
                     fallback_result = match_nmap_svc_fp(
                         output, proto="udp", probe=fallback, soft=soft
                     )
@@ -1501,10 +1462,10 @@ def get_ikescan_vendor_ids() -> List[Tuple[bytes, Pattern[bytes]]]:
 
 def find_ike_vendor_id(vendorid: bytes) -> Optional[bytes]:
     vid = encode_hex(vendorid)
-    for name, sig in get_ikescan_vendor_ids():
-        if sig.search(vid):
-            return name
-    return None
+    return next(
+        (name for name, sig in get_ikescan_vendor_ids() if sig.search(vid)),
+        None,
+    )
 
 
 _WIRESHARK_MANUF_DB_LAST_ADDR: List[int] = []
@@ -1730,7 +1691,7 @@ def nmap_svc_fp_format_data(data: str, match: Match) -> Optional[str]:
         if len(value) == 2:
             # $I(x,"<") or $I(x,">") may exist
             data = _nmap_command_match_i(i + 1).sub(
-                lambda m: str(struct.unpack("%sH" % m.groups()[0], value)[0]),
+                lambda m: str(struct.unpack(f"{m.groups()[0]}H", value)[0]),
                 data,
             )
     return data
@@ -1997,7 +1958,7 @@ def get_addr_type(addr: str) -> Optional[str]:
     """
 
     if ":" not in addr:
-        addr = "::ffff:" + addr
+        addr = f"::ffff:{addr}"
     try:
         data = ip2int(addr)
     except (TypeError, socket.error):
@@ -2295,7 +2256,7 @@ else:
                     result[field] = {
                         key.replace(".", "_"): value for key, value in flddata
                     }
-                    result["%s_text" % field] = "/".join(
+                    result[f"{field}_text"] = "/".join(
                         "%s=%s" % item for item in flddata
                     )
                 elif field in ["bits", "exponent"]:
@@ -2378,9 +2339,7 @@ def key_sort_none(value: Optional[Any]) -> Any:
     happily compares with anything, and is lower than anything.
 
     """
-    if value is None:
-        return MIN_VALUE
-    return value
+    return MIN_VALUE if value is None else value
 
 
 def ptr2addr(ptr: str) -> Optional[str]:
@@ -2496,7 +2455,7 @@ def download_if_newer(
         processor = shutil.copyfileobj  # type: ignore[assignment]
     assert processor is not None
     opener = build_opener()
-    opener.addheaders = [("User-Agent", "IVRE/%s +https://ivre.rocks/" % VERSION)]
+    opener.addheaders = [("User-Agent", f"IVRE/{VERSION} +https://ivre.rocks/")]
     try:
         outstat = os.stat(outfile)
     except FileNotFoundError:

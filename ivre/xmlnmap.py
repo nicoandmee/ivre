@@ -22,6 +22,7 @@
 """
 
 
+
 import datetime
 import hashlib
 import os
@@ -49,7 +50,7 @@ SCHEMA_VERSION = 22
 
 # Scripts that mix elem/table tags with and without key attributes,
 # which is not supported for now
-IGNORE_TABLE_ELEMS = set(["xmpp-info", "sslv2", "sslv2-drown"])
+IGNORE_TABLE_ELEMS = {"xmpp-info", "sslv2", "sslv2-drown"}
 
 SCREENSHOT_PATTERN = re.compile("^ *Saved to (.*)$", re.MULTILINE)
 RTSP_SCREENSHOT_PATTERN = re.compile("^ *Saved [^ ]* to (.*)$", re.MULTILINE)
@@ -103,7 +104,7 @@ def _parse_mongodb_databases_kv(
     if key == "$err":
         key = "errmsg"
     if prefix is not None:
-        key = "%s_%s" % (prefix, key)
+        key = f"{prefix}_{key}"
 
     if force_type is not None:
         value = force_type(value)
@@ -221,7 +222,7 @@ def add_mongodb_databases_data(script):
             continue
 
         else:
-            raise ValueError("Unable to parse %s" % line)
+            raise ValueError(f"Unable to parse {line}")
 
         # Handle a "key = value" line
         _parse_mongodb_databases_kv(line, cur_dict)
@@ -287,14 +288,11 @@ def add_smb_ls_data(script):
                     size = int(size)
                     result["total"]["bytes"] += size
                 cur_vol["files"].append(
-                    {"size": size, "filename": fname, "time": "%s %s" % (date, time)}
+                    {"size": size, "filename": fname, "time": f"{date} {time}"}
                 )
                 result["total"]["files"] += 1
         elif state == 2:  # total values
-            if line:
-                # we do not use this data
-                pass
-            else:
+            if not line:
                 state = 0  # outside a volume
                 result["volumes"].append(cur_vol)
                 cur_vol = None
@@ -400,7 +398,7 @@ def add_afp_ls_data(script):
                             "gid": gid,
                             "size": size,
                             "filename": fname,
-                            "time": "%s %s" % (date, time),
+                            "time": f"{date} {time}",
                         }
                     )
                     result["total"]["files"] += 1
@@ -729,14 +727,14 @@ def change_http_git(table):
     for key, value in table.items():
         if isinstance(value.get("files-found"), dict):
             value["files-found"] = [
-                ".git%s" % k[4:] if k.startswith("_git") else k
+                f".git{k[4:]}" if k.startswith("_git") else k
                 for k, v in value["files-found"].items()
                 if v == "true"
             ]
         if isinstance(value.get("interesting-matches"), dict):
             value["interesting-matches"] = [
                 {
-                    "file": ".git%s" % k[4:] if k.startswith("_git") else k,
+                    "file": f".git{k[4:]}" if k.startswith("_git") else k,
                     "matches": v,
                 }
                 for k, v in value["interesting-matches"].items()
@@ -747,9 +745,7 @@ def change_http_git(table):
 
 def change_http_server_header(table):
     if isinstance(table, dict):
-        if "Server" in table:
-            return [table["Server"]]
-        return []
+        return [table["Server"]] if "Server" in table else []
     return table
 
 
@@ -834,14 +830,14 @@ def change_ssh2_enum_algos(out, table):
         "raw": hasshval,
     }
     hasshval = hasshval.encode()
-    hassh.update(
+    hassh |= (
         (hashtype, hashlib.new(hashtype, hasshval).hexdigest())
         for hashtype in ["md5", "sha1", "sha256"]
     )
     table["hassh"] = hassh
     new_out = ["", "  HASSH"]
     new_out.extend(
-        "    %s: %s" % (key, hassh[key])
+        f"    {key}: {hassh[key]}"
         for key in ["version", "raw", "md5", "sha1", "sha256"]
     )
     out += "\n".join(new_out)
@@ -955,9 +951,11 @@ def split_smb_os_discovery(script):
     }
     smb = {
         "id": "smb-os-discovery",
-        "smb-os-discovery": {k: value.get(k) for k in smb_values if k in value},
+        "smb-os-discovery": {
+            k: value.get(k) for k in smb_values if k in value
+        },
         "output": "\n".join(
-            "  {}: {}".format(f, value.get(k))
+            f"  {f}: {value.get(k)}"
             for k, f in smb_values.items()
             if k in value
         ),
@@ -977,9 +975,11 @@ def split_smb_os_discovery(script):
     }
     ntlm = {
         "id": "ntlm-info",
-        "ntlm-info": {f: value.get(k) for k, f in ntlm_values.items() if k in value},
+        "ntlm-info": {
+            f: value.get(k) for k, f in ntlm_values.items() if k in value
+        },
         "output": "\n".join(
-            "  {}: {}".format(f, value.get(k))
+            f"  {f}: {value.get(k)}"
             for k, f in ntlm_values.items()
             if k in value
         ),
@@ -994,149 +994,106 @@ SPLIT_SCRIPTS = {
 
 
 IGNORE_SCRIPTS = {
-    "mcafee-epo-agent": set(["ePO Agent not found"]),
-    "ftp-bounce": set(["no banner"]),
-    "telnet-encryption": set(["\n  ERROR: Failed to send packet: TIMEOUT"]),
-    "http-mobileversion-checker": set(["No mobile version detected."]),
-    "http-referer-checker": set(["Couldn't find any cross-domain scripts."]),
-    "http-default-accounts": set(
-        [
-            "[ERROR] HTTP request table is empty. This should not happen "
-            "since we at least made one request.",
-        ]
-    ),
-    "http-headers": set(["\n  (Request type: GET)\n"]),
-    "http-cisco-anyconnect": set(
-        [
-            "\n  ERROR: Not a Cisco ASA or unsupported version",
-        ]
-    ),
-    "ndmp-fs-info": set(
-        [
-            "\n  ERROR: Failed to get filesystem information from server",
-        ]
-    ),
-    "ndmp-version": set(
-        [
-            "\n  ERROR: Failed to get host information from server",
-        ]
-    ),
-    "ajp-auth": set(["\n  ERROR: Failed to connect to AJP server"]),
-    "ajp-headers": set(["\n  ERROR: Failed to retrieve server headers"]),
-    "ajp-methods": set(
-        [
-            "Failed to get a valid response for the OPTION request",
-        ]
-    ),
-    "ajp-request": set(
-        [
-            "\n  ERROR: Failed to retrieve response for request",
-            "\n  ERROR: Failed to connect to AJP server",
-        ]
-    ),
-    "giop-info": set(["  \n  ERROR: Failed to read Packet.GIOP"]),
-    "rsync-list-modules": set(
-        [
-            "\n  ERROR: Failed to connect to rsync server",
-            "\n  ERROR: Failed to retrieve a list of modules",
-        ]
-    ),
-    "sip-methods": set(["ERROR: Failed to connect to the SIP server."]),
-    "sip-call-spoof": set(["ERROR: Failed to connect to the SIP server."]),
-    "rpcap-info": set(["\n  ERROR: EOF"]),
-    "rmi-dumpregistry": set(["Registry listing failed (Handshake failed)"]),
-    "voldemort-info": set(["\n  ERROR: Unsupported protocol"]),
-    "irc-botnet-channels": set(["\n  ERROR: EOF\n"]),
-    "bitcoin-getaddr": set(
-        [
-            "\n  ERROR: Failed to extract address information",
-            "\n  ERROR: Failed to extract version information",
-        ]
-    ),
-    "bitcoin-info": set(["\n  ERROR: Failed to extract version information"]),
-    "drda-info": set(["The response contained no EXCSATRD"]),
-    "rdp-enum-encryption": set(["Received unhandled packet"]),
-    "ldap-search": set(["ERROR: Failed to bind as the anonymous user"]),
-    "mongodb-databases": set(
-        [
-            "No Bson data returned",
-        ]
-    ),
-    # fixed in nmap commit 95f7b76d9f12d10832523e6f3db0e602a04b3a12
-    # https://github.com/nmap/nmap/commit/95f7b76d9f12d10832523e6f3db0e602a04b3a12
-    "snmp-hh3c-logins": set(["\n  baseoid: 1.3.6.1.4.1.25506.2.12.1.1.1"]),
-    "dns-nsec-enum": set(["\n  No NSEC records found\n"]),
-    "dns-nsec3-enum": set(["\n  DNSSEC NSEC3 not supported\n"]),
-    "http-csrf": set(["Couldn't find any CSRF vulnerabilities."]),
-    "http-devframework": set(
-        [
-            "Couldn't determine the underlying framework or CMS. Try increasing "
-            "'httpspider.maxpagecount' value to spider more pages.",
-        ]
-    ),
-    "http-dombased-xss": set(["Couldn't find any DOM based XSS."]),
-    "http-drupal-enum": set(
-        [
-            "Nothing found amongst the top 100 resources,use "
-            "--script-args number=<number|all> for deeper analysis)",
-        ]
-    ),
-    "http-errors": set(["Couldn't find any error pages."]),
-    "http-feed": set(["Couldn't find any feeds."]),
-    "http-litespeed-sourcecode-download": set(
-        [
-            "Request with null byte did not work. This web server might not be "
-            "vulnerable",
-            "Page: /index.php was not found. Try with an existing file.",
-        ]
-    ),
-    "http-sitemap-generator": set(
-        [
-            "\n  Directory structure:\n    /\n      Other: 1\n  Longest directory "
-            "structure:\n    Depth: 0\n    Dir: /\n  Total files found (by "
-            "extension):\n    Other: 1\n",
-            "\n  Directory structure:\n  Longest directory structure:\n    "
-            "Depth: 0\n    Dir: /\n  Total files found (by extension):\n    \n",
-        ]
-    ),
-    "http-stored-xss": set(["Couldn't find any stored XSS vulnerabilities."]),
-    "http-wordpress-enum": set(
-        [
-            "Nothing found amongst the top 100 resources,use "
-            "--script-args search-limit=<number|all> for deeper analysis)",
-        ]
-    ),
-    "http-wordpress-users": set(
-        [
-            "[Error] Wordpress installation was not found"
-            ". We couldn't find wp-login.php"
-        ]
-    ),
-    "ssl-date": set(["TLS randomness does not represent time"]),
-    "http-comments-displayer": set(["Couldn't find any comments."]),
-    "http-jsonp-detection": set(["Couldn't find any JSONP endpoints."]),
-    # host scripts
-    "firewalk": set(["None found"]),
-    "ipidseq": set(["Unknown"]),
-    "fcrdns": set(["FAIL (No PTR record)"]),
-    "msrpc-enum": set(["SMB: ERROR: Server disconnected the connection"]),
-    "smb-mbenum": set(
-        [
-            "\n  ERROR: Failed to connect to browser service: "
-            "SMB: ERROR: Server disconnected the connection"
-        ]
-    ),
+    "mcafee-epo-agent": {"ePO Agent not found"},
+    "ftp-bounce": {"no banner"},
+    "telnet-encryption": {"\n  ERROR: Failed to send packet: TIMEOUT"},
+    "http-mobileversion-checker": {"No mobile version detected."},
+    "http-referer-checker": {"Couldn't find any cross-domain scripts."},
+    "http-default-accounts": {
+        "[ERROR] HTTP request table is empty. This should not happen "
+        "since we at least made one request."
+    },
+    "http-headers": {"\n  (Request type: GET)\n"},
+    "http-cisco-anyconnect": {
+        "\n  ERROR: Not a Cisco ASA or unsupported version"
+    },
+    "ndmp-fs-info": {
+        "\n  ERROR: Failed to get filesystem information from server"
+    },
+    "ndmp-version": {"\n  ERROR: Failed to get host information from server"},
+    "ajp-auth": {"\n  ERROR: Failed to connect to AJP server"},
+    "ajp-headers": {"\n  ERROR: Failed to retrieve server headers"},
+    "ajp-methods": {"Failed to get a valid response for the OPTION request"},
+    "ajp-request": {
+        "\n  ERROR: Failed to retrieve response for request",
+        "\n  ERROR: Failed to connect to AJP server",
+    },
+    "giop-info": {"  \n  ERROR: Failed to read Packet.GIOP"},
+    "rsync-list-modules": {
+        "\n  ERROR: Failed to connect to rsync server",
+        "\n  ERROR: Failed to retrieve a list of modules",
+    },
+    "sip-methods": {"ERROR: Failed to connect to the SIP server."},
+    "sip-call-spoof": {"ERROR: Failed to connect to the SIP server."},
+    "rpcap-info": {"\n  ERROR: EOF"},
+    "rmi-dumpregistry": {"Registry listing failed (Handshake failed)"},
+    "voldemort-info": {"\n  ERROR: Unsupported protocol"},
+    "irc-botnet-channels": {"\n  ERROR: EOF\n"},
+    "bitcoin-getaddr": {
+        "\n  ERROR: Failed to extract address information",
+        "\n  ERROR: Failed to extract version information",
+    },
+    "bitcoin-info": {"\n  ERROR: Failed to extract version information"},
+    "drda-info": {"The response contained no EXCSATRD"},
+    "rdp-enum-encryption": {"Received unhandled packet"},
+    "ldap-search": {"ERROR: Failed to bind as the anonymous user"},
+    "mongodb-databases": {"No Bson data returned"},
+    "snmp-hh3c-logins": {"\n  baseoid: 1.3.6.1.4.1.25506.2.12.1.1.1"},
+    "dns-nsec-enum": {"\n  No NSEC records found\n"},
+    "dns-nsec3-enum": {"\n  DNSSEC NSEC3 not supported\n"},
+    "http-csrf": {"Couldn't find any CSRF vulnerabilities."},
+    "http-devframework": {
+        "Couldn't determine the underlying framework or CMS. Try increasing "
+        "'httpspider.maxpagecount' value to spider more pages."
+    },
+    "http-dombased-xss": {"Couldn't find any DOM based XSS."},
+    "http-drupal-enum": {
+        "Nothing found amongst the top 100 resources,use "
+        "--script-args number=<number|all> for deeper analysis)"
+    },
+    "http-errors": {"Couldn't find any error pages."},
+    "http-feed": {"Couldn't find any feeds."},
+    "http-litespeed-sourcecode-download": {
+        "Request with null byte did not work. This web server might not be "
+        "vulnerable",
+        "Page: /index.php was not found. Try with an existing file.",
+    },
+    "http-sitemap-generator": {
+        "\n  Directory structure:\n    /\n      Other: 1\n  Longest directory "
+        "structure:\n    Depth: 0\n    Dir: /\n  Total files found (by "
+        "extension):\n    Other: 1\n",
+        "\n  Directory structure:\n  Longest directory structure:\n    "
+        "Depth: 0\n    Dir: /\n  Total files found (by extension):\n    \n",
+    },
+    "http-stored-xss": {"Couldn't find any stored XSS vulnerabilities."},
+    "http-wordpress-enum": {
+        "Nothing found amongst the top 100 resources,use "
+        "--script-args search-limit=<number|all> for deeper analysis)"
+    },
+    "http-wordpress-users": {
+        "[Error] Wordpress installation was not found"
+        ". We couldn't find wp-login.php"
+    },
+    "ssl-date": {"TLS randomness does not represent time"},
+    "http-comments-displayer": {"Couldn't find any comments."},
+    "http-jsonp-detection": {"Couldn't find any JSONP endpoints."},
+    "firewalk": {"None found"},
+    "ipidseq": {"Unknown"},
+    "fcrdns": {"FAIL (No PTR record)"},
+    "msrpc-enum": {"SMB: ERROR: Server disconnected the connection"},
+    "smb-mbenum": {
+        "\n  ERROR: Failed to connect to browser service: "
+        "SMB: ERROR: Server disconnected the connection"
+    },
 }
 
-IGNORE_SCRIPTS_IDS = set(
-    [
-        "http-screenshot",
-        "mainframe-screenshot",
-        "rtsp-screenshot",
-        "vnc-screenshot",
-        "x11-screenshot",
-    ]
-)
+IGNORE_SCRIPTS_IDS = {
+    "http-screenshot",
+    "mainframe-screenshot",
+    "rtsp-screenshot",
+    "vnc-screenshot",
+    "x11-screenshot",
+}
 
 MSSQL_ERROR = re.compile(
     "^ *(ERROR: )?("
@@ -1186,33 +1143,28 @@ IGNORE_SCRIPTS_REGEXP = {
     ),
 }
 
-IGNORE_SCRIPT_OUTPUTS = set(
-    [
-        "Unable to open connection",
-        "false",
-        "TIMEOUT",
-        "ERROR",
-        "\n",
-        "\r\n",
-    ]
-)
+IGNORE_SCRIPT_OUTPUTS = {
+    "Unable to open connection",
+    "false",
+    "TIMEOUT",
+    "ERROR",
+    "\n",
+    "\r\n",
+}
 
-IGNORE_SCRIPT_OUTPUTS_REGEXP = set(
-    [
-        # MD5(<empty>)
-        re.compile("d41d8cd98f00b204e9800998ecf8427e", re.IGNORECASE),
-        re.compile(
-            "^ *ERROR\\:\\ ("
-            "Failed\\ to\\ (connect\\ to|receive\\ response\\ from)\\ server|"
-            "Script\\ execution\\ failed\\ \\(use\\ \\-d\\ to\\ debug\\)|"
-            "Receiving\\ packet\\:\\ (ERROR|EOF)|"
-            "Failed\\ to\\ send\\ packet\\:\\ ERROR|"
-            "ERROR)",
-            re.MULTILINE,
-        ),
-        re.compile("^ *(SMB|ERROR):.*TIMEOUT", re.MULTILINE),
-    ]
-)
+IGNORE_SCRIPT_OUTPUTS_REGEXP = {
+    re.compile("d41d8cd98f00b204e9800998ecf8427e", re.IGNORECASE),
+    re.compile(
+        "^ *ERROR\\:\\ ("
+        "Failed\\ to\\ (connect\\ to|receive\\ response\\ from)\\ server|"
+        "Script\\ execution\\ failed\\ \\(use\\ \\-d\\ to\\ debug\\)|"
+        "Receiving\\ packet\\:\\ (ERROR|EOF)|"
+        "Failed\\ to\\ send\\ packet\\:\\ ERROR|"
+        "ERROR)",
+        re.MULTILINE,
+    ),
+    re.compile("^ *(SMB|ERROR):.*TIMEOUT", re.MULTILINE),
+}
 
 MASSCAN_S7_INDEXES = {
     0x11: {
@@ -1431,19 +1383,17 @@ def masscan_parse_s7info(data):
                 value = value.decode("latin-1")
             else:
                 output_data[key] = value
-                output_text.append("  %s: %s" % (key, value))
+                output_text.append(f"  {key}: {value}")
     if output_data.get("system_name") == "Technodrome":
         service_info = {
             "service_name": "honeypot",
             "service_product": "MushMush Conpot",
         }
-    else:
-        product = {
-            "Original Siemens Equipment": "Siemens S7 PLC",
-            "Original INSEVIS equipment": "Insevis S7 PLC",
-        }.get(output_data.get("copyright"))
-        if product:
-            service_info["service_product"] = product
+    elif product := {
+        "Original Siemens Equipment": "Siemens S7 PLC",
+        "Original INSEVIS equipment": "Insevis S7 PLC",
+    }.get(output_data.get("copyright")):
+        service_info["service_product"] = product
     output_text.append("\n")
     return service_info, output_text, output_data
 
@@ -1468,11 +1418,9 @@ def ignore_script(script):
         and IGNORE_SCRIPTS_REGEXP[sid].search(output)
     ):
         return True
-    if output is not None and any(
+    return output is not None and any(
         expr.search(output) for expr in IGNORE_SCRIPT_OUTPUTS_REGEXP
-    ):
-        return True
-    return False
+    )
 
 
 def add_service_hostname(service_info, hostnames):
@@ -1482,7 +1430,7 @@ def add_service_hostname(service_info, hostnames):
     if "service_extrainfo" in service_info:
         for data in service_info["service_extrainfo"].lower().split(", "):
             if data.startswith("domain:"):
-                name += "." + data[7:].strip()
+                name += f".{data[7:].strip()}"
                 break
     add_hostname(name, "service", hostnames)
 
@@ -1495,7 +1443,7 @@ class NoExtResolver(EntityResolver):
     """
 
     def resolveEntity(self, *_):
-        return "file://%s" % os.devnull
+        return f"file://{os.devnull}"
 
 
 class NmapHandler(ContentHandler):

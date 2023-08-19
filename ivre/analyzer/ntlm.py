@@ -87,10 +87,8 @@ def _ntlm_negotiate_extract(negotiate: bytes) -> Optional[Dict[str, Any]]:
             "NTLM message is abnormally short [%r, size %d]", negotiate, len(negotiate)
         )
         return None
-    value = {}
-
     flags = struct.unpack("I", negotiate[12:16])[0]
-    value["ntlm-fingerprint"] = "0x%08x" % flags
+    value = {"ntlm-fingerprint": "0x%08x" % flags}
     uses_unicode = is_unicode(negotiate, flags)
     if len(negotiate) > 32:
         ln_dom, off_dom, ln_work, off_work = struct.unpack("H2xIH2xI", negotiate[16:32])
@@ -137,9 +135,8 @@ def _ntlm_challenge_extract(challenge: bytes) -> Optional[Dict[str, Any]]:
         )
         return None
 
-    value = {}
     flags = struct.unpack("I", challenge[20:24])[0]
-    value["ntlm-fingerprint"] = "0x%08x" % flags
+    value = {"ntlm-fingerprint": "0x%08x" % flags}
     uses_unicode = is_unicode(challenge, flags)
 
     # Get target name
@@ -174,7 +171,7 @@ def _ntlm_challenge_extract(challenge: bytes) -> Optional[Dict[str, Any]]:
 
         maj, minor, bld, ntlm_ver = struct.unpack("BBH3xB", challenge[48:56])
         try:
-            value["Product_Version"] = "{}.{}.{}".format(maj, minor, bld)
+            value["Product_Version"] = f"{maj}.{minor}.{bld}"
         except ValueError:
             pass
         try:
@@ -205,18 +202,17 @@ def _ntlm_challenge_extract(challenge: bytes) -> Optional[Dict[str, Any]]:
             return value
 
         while len(challenge) <= ln_info:
-            typ, ln = struct.unpack("HH", challenge[0:4])
-            if 1 <= typ <= 5:
-                try:
-                    value[info_types[typ]] = _extract_substr(
-                        challenge, 4, ln, uses_unicode
-                    )
-                except ValueError:
-                    pass
-                challenge = challenge[4 + ln :]
-            else:
+            typ, ln = struct.unpack("HH", challenge[:4])
+            if not 1 <= typ <= 5:
                 return value
 
+            try:
+                value[info_types[typ]] = _extract_substr(
+                    challenge, 4, ln, uses_unicode
+                )
+            except ValueError:
+                pass
+            challenge = challenge[4 + ln :]
     return value
 
 
@@ -273,7 +269,7 @@ def _ntlm_authenticate_info(request: bytes) -> Optional[Dict[str, Any]]:
     if has_version and offset >= 72 and request[72:]:
         maj, minor, bld, ntlm_ver = struct.unpack("BBH3xB", request[64:72])
         try:
-            value["Product_Version"] = "{}.{}.{}".format(maj, minor, bld)
+            value["Product_Version"] = f"{maj}.{minor}.{bld}"
         except ValueError:
             pass
         try:
@@ -336,6 +332,6 @@ def _is_ntlm_message(message: str) -> bool:
     if val1.lower() == "negotiate":
         try:
             return utils.decode_b64(val2.encode())[:7] == b"NTLMSSP"
-        except (UnicodeDecodeError, TypeError, ValueError, binascii.Error):
+        except (TypeError, ValueError, binascii.Error):
             pass
     return False

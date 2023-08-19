@@ -52,10 +52,7 @@ def worker_initializer(dburl: Optional[str], no_merge: bool) -> None:
     # pylint: disable=global-variable-undefined
     global w_datadb, w_outdb, w_output
     w_outdb = db.view if dburl is None else DBView.from_url(dburl)  # type: ignore
-    if no_merge:
-        w_output = w_outdb.store_host  # type: ignore
-    else:
-        w_output = w_outdb.store_or_merge_host  # type: ignore
+    w_output = w_outdb.store_host if no_merge else w_outdb.store_or_merge_host
     try:
         w_datadb = w_outdb.globaldb.data  # type: ignore
     except AttributeError:
@@ -70,14 +67,8 @@ def worker_destroyer(_: None) -> None:
 def main() -> None:
     default_processes = max(1, cpu_count())
     parser = argparse.ArgumentParser(description=__doc__, parents=[DB().argparser])
-    if db.nmap is None:
-        fltnmap = None
-    else:
-        fltnmap = db.nmap.flt_empty
-    if db.passive is None:
-        fltpass = None
-    else:
-        fltpass = db.passive.flt_empty
+    fltnmap = None if db.nmap is None else db.nmap.flt_empty
+    fltpass = None if db.passive is None else db.passive.flt_empty
     _from: List[Generator[Record, None, None]] = []
 
     parser.add_argument(
